@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -10,478 +12,326 @@ import {
   View,
 } from 'react-native';
 import { auth } from '../../firebase/firebaseConfig';
-import { borderRadius, colors, shadows, spacing } from '../../styles/theme';
+import {
+  getAllMeditations,
+  getDailyQuote, getUserData, getUserProgressStats
+} from '../../firebase/firebaseUtils';
 
-const quotes = [
-  'The present moment is filled with joy and peace.',
-  'Your mind is a powerful tool for healing.',
-  'Every breath is a fresh start.',
-  'Peace comes from within.',
-  'You are stronger than you think.',
-  'Mindfulness is the path to happiness.',
-  'Let go of what you cannot control.',
-  'Your potential is limitless.',
-];
+const P = {
+  teal:        '#2DD4BF',
+  tealDark:    '#0F766E',
+  tealDeep:    '#134E4A',
+  navy:        '#0A1628',
+  navyMid:     '#112240',
+  navyLight:   '#1E3A5F',
+  navyCard:    '#162035',
+  purple:      '#7C3AED',
+  purpleSoft:  '#A78BFA',
+  amber:       '#F59E0B',
+  white:       '#FFFFFF',
+  muted:       '#94A3B8',
+  dimmed:      '#475569',
+  glass:       'rgba(255,255,255,0.05)',
+  glassBorder: 'rgba(255,255,255,0.08)',
+};
 
-const featuredMeditations = [
-  {
-    id: 1,
-    title: 'Morning Calm',
-    subtitle: 'Start your day with clarity',
-    duration: 10,
-    icon: 'sunny',
-    gradient: ['#1A826B', '#2BB092'],
-    description: 'Begin your day with clarity and focus',
-  },
-  {
-    id: 2,
-    title: 'Focus Session',
-    subtitle: 'Enhance your concentration',
-    duration: 15,
-    icon: 'bulb',
-    gradient: ['#2A9D8F', '#21867A'],
-    description: 'Boost your productivity and focus',
-  },
-  {
-    id: 3,
-    title: 'Evening Peace',
-    subtitle: 'Wind down before sleep',
-    duration: 20,
-    icon: 'moon',
-    gradient: ['#457B9D', '#1D3557'],
-    description: 'Relax and prepare for restful sleep',
-  },
+const CATEGORY_GRADIENTS = {
+  focus:       ['#2DD4BF', '#0F766E'],
+  mindfulness: ['#0F766E', '#134E4A'],
+  sleep:       ['#7C3AED', '#A78BFA'],
+  morning:     ['#F59E0B', '#EF4444'],
+  anxiety:     ['#A78BFA', '#7C3AED'],
+  stress:      ['#EF4444', '#F59E0B'],
+  breathing:   ['#2DD4BF', '#A78BFA'],
+  general:     ['#0F766E', '#2DD4BF'],
+};
+
+const CATEGORY_ICONS = {
+  focus:       'bulb-outline',
+  mindfulness: 'leaf-outline',
+  sleep:       'moon-outline',
+  morning:     'sunny-outline',
+  anxiety:     'heart-outline',
+  stress:      'water-outline',
+  breathing:   'sparkles-outline',
+  general:     'headset-outline',
+};
+
+const EXPLORE_CATS = [
+  { label: 'Sleep',     key: 'sleep',     emoji: '🌙', colors: ['#7C3AED', '#A78BFA'] },
+  { label: 'Focus',     key: 'focus',     emoji: '🎯', colors: ['#2DD4BF', '#0F766E'] },
+  { label: 'Breathing', key: 'breathing', emoji: '🌬️', colors: ['#2DD4BF', '#A78BFA'] },
+  { label: 'Morning',   key: 'morning',   emoji: '☀️', colors: ['#F59E0B', '#EF4444'] },
 ];
 
 const HomeScreen = ({ navigation }) => {
-  const [userName, setUserName] = useState('Friend');
-  const [userStats, setUserStats] = useState({
-    sessionsCompleted: 0,
-    totalMinutes: 0,
-    streak: 0,
-  });
-  const [dailyQuote, setDailyQuote] = useState('');
+  const [userName, setUserName]         = useState('Friend');
+  const [userStats, setUserStats]       = useState(null);
+  const [dailyQuote, setDailyQuote]     = useState(null);
+  const [meditations, setMeditations]   = useState([]);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingQuote, setLoadingQuote] = useState(true);
+  const [loadingMeds, setLoadingMeds]   = useState(true);
 
+  // Load quote + meditations once on mount
   useEffect(() => {
-    // Get user display name from Firebase Auth
-    if (auth.currentUser?.displayName) {
-      setUserName(auth.currentUser.displayName);
-      console.log('User name from Firebase:', auth.currentUser.displayName);
-    } else {
-      setUserName('Friend');
-    }
-
-    // Set daily quote
-    const dayOfYear = Math.floor(
-      (Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000
-    );
-    setDailyQuote(quotes[dayOfYear % quotes.length]);
+    getDailyQuote().then(q => setDailyQuote(q)).catch(() => null).finally(() => setLoadingQuote(false));
+    getAllMeditations().then(d => setMeditations(d)).catch(() => setMeditations([])).finally(() => setLoadingMeds(false));
   }, []);
 
+  // Reload username + stats on every focus — catches profile name changes
+  useFocusEffect(useCallback(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) { setLoadingStats(false); return; }
+    // Read name from Firestore so profile edits are reflected
+    getUserData(currentUser.uid)
+      .then(d => { if (d?.displayName) setUserName(d.displayName); })
+      .catch(() => setUserName(currentUser.displayName || 'Friend'));
+    setLoadingStats(true);
+    getUserProgressStats(currentUser.uid)
+      .then(s => setUserStats(s))
+      .catch(() => null)
+      .finally(() => setLoadingStats(false));
+  }, []));
+
+  const featured = meditations.slice(0, 3);
+  const stats = {
+    sessionsCompleted: userStats?.sessionsCompleted ?? 0,
+    totalMinutes:      userStats?.totalMinutes      ?? 0,
+    streak:            userStats?.streak            ?? 0,
+  };
+  const quoteText   = dailyQuote?.text   ?? 'The present moment is filled with joy and peace.';
+  const quoteAuthor = dailyQuote?.author ?? '';
+  const greeting    = (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header with Greeting */}
+    <SafeAreaView style={styles.root}>
+      <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
+      <View style={styles.glowTeal} />
+      <View style={styles.glowPurple} />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
+        {/* ── Header ── */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>
-              Welcome, {userName.split(' ')[0]}
-            </Text>
-            <Text style={styles.subtitle}>Let's find your inner peace</Text>
+            <Text style={styles.greeting}>{greeting}</Text>
+            <Text style={styles.userName}>{userName.split(' ')[0]} 👋</Text>
           </View>
-          <TouchableOpacity
-            style={styles.notificationIcon}
-            onPress={() => navigation.navigate('Profile')}
-          >
-            <View style={styles.notificationBadge}>
-              <Ionicons name="notifications" size={22} color={colors.white} />
-            </View>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+            <LinearGradient colors={[P.teal, P.purpleSoft]} style={styles.avatar}>
+              <Ionicons name="person-outline" size={20} color={P.white} />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
 
-        {/* Daily Quote Card - Modern Design */}
-        <LinearGradient
-          colors={['#1A826B', '#2BB092']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.quoteCard}
-        >
-          <View style={styles.quoteContent}>
-            <Ionicons name="sparkles" size={24} color={colors.white} />
-            <Text style={styles.quoteText}>{dailyQuote}</Text>
-            <View style={styles.quoteDots}>
-              <View style={styles.dot} />
-              <View style={styles.dot} />
-              <View style={styles.dot} />
-            </View>
-          </View>
-        </LinearGradient>
-
-        {/* Stats Section - Beautiful Cards */}
-        <View style={styles.statsContainer}>
-          <LinearGradient
-            colors={['#F0FDF4', '#DCFCE7']}
-            style={styles.statCard}
-          >
-            <View style={styles.statIcon}>
-              <Ionicons name="leaf" size={28} color={colors.primary} />
-            </View>
-            <Text style={styles.statValue}>{userStats.sessionsCompleted}</Text>
-            <Text style={styles.statLabel}>Sessions</Text>
-          </LinearGradient>
-
-          <LinearGradient
-            colors={['#F0FDF4', '#DCFCE7']}
-            style={styles.statCard}
-          >
-            <View style={styles.statIcon}>
-              <Ionicons name="time" size={28} color={colors.primary} />
-            </View>
-            <Text style={styles.statValue}>{userStats.totalMinutes}</Text>
-            <Text style={styles.statLabel}>Minutes</Text>
-          </LinearGradient>
-
-          <LinearGradient
-            colors={['#FFFBEB', '#FEF3C7']}
-            style={styles.statCard}
-          >
-            <View style={styles.statIcon}>
-              <Ionicons name="flame" size={28} color={colors.accent} />
-            </View>
-            <Text style={styles.statValue}>{userStats.streak}</Text>
-            <Text style={styles.statLabel}>Streak</Text>
-          </LinearGradient>
+        {/* ── Stats ── */}
+        <View style={styles.statsRow}>
+          {loadingStats ? (
+            <ActivityIndicator color={P.teal} style={{ flex: 1, height: 80 }} />
+          ) : (
+            [
+              { icon: 'layers-outline', value: stats.sessionsCompleted, label: 'Sessions', accent: P.teal },
+              { icon: 'time-outline',   value: stats.totalMinutes,      label: 'Minutes',  accent: P.purpleSoft },
+              { icon: 'flame-outline',  value: stats.streak,            label: 'Streak 🔥', accent: P.amber },
+            ].map((s, i) => (
+              <View key={i} style={styles.statCard}>
+                <View style={[styles.statIcon, { backgroundColor: s.accent + '20' }]}>
+                  <Ionicons name={s.icon} size={20} color={s.accent} />
+                </View>
+                <Text style={[styles.statValue, { color: s.accent }]}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Suggested For You Section */}
+        {/* ── Quote ── */}
+        <View style={styles.quoteCard}>
+          <LinearGradient colors={[P.teal, P.purpleSoft]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.quoteLine} />
+          <View style={styles.quoteBody}>
+            <View style={styles.quoteBadgeRow}>
+              <Text style={styles.quoteStar}>✦</Text>
+              <Text style={styles.quoteBadge}>DAILY REFLECTION</Text>
+            </View>
+            {loadingQuote ? (
+              <ActivityIndicator color={P.teal} />
+            ) : (
+              <>
+                <Text style={styles.quoteText}>"{quoteText}"</Text>
+                {quoteAuthor ? <Text style={styles.quoteAuthor}>— {quoteAuthor}</Text> : null}
+              </>
+            )}
+          </View>
+        </View>
+
+        {/* ── Quick Start ── */}
+        <TouchableOpacity activeOpacity={0.88} onPress={() => navigation.navigate('Meditate')} style={styles.quickCard}>
+          <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFillObject} />
+          <View style={styles.quickGlowDot} />
+          <View style={styles.quickLeft}>
+            <Text style={styles.quickLabel}>SESSION</Text>
+            <Text style={styles.quickTitle}>Ready to meditate?</Text>
+            <Text style={styles.quickSub}>Tap to start a session now</Text>
+          </View>
+          <View style={styles.quickPlayBtn}>
+            <Ionicons name="play" size={22} color={P.teal} />
+          </View>
+        </TouchableOpacity>
+
+        {/* ── Suggested ── */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
+          <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>Suggested For You</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Meditation')}>
-              <Text style={styles.seeAll}>See All</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Meditate')}>
+              <Text style={styles.seeAll}>See all →</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Featured Meditation Cards */}
-          {featuredMeditations.map((meditation) => (
-            <TouchableOpacity
-              key={meditation.id}
-              style={styles.meditationCardWrapper}
-              onPress={() =>
-                navigation.navigate('MeditationDetail', { meditation })
-              }
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={meditation.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.meditationCard}
-              >
-                <View style={styles.meditationHeader}>
-                  <View>
-                    <Text style={styles.meditationTitle}>{meditation.title}</Text>
-                    <Text style={styles.meditationSubtitle}>
-                      {meditation.subtitle}
+          {loadingMeds ? (
+            <ActivityIndicator color={P.teal} style={{ marginVertical: 24 }} />
+          ) : featured.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyEmoji}>🧘</Text>
+              <Text style={styles.emptyText}>No sessions available</Text>
+            </View>
+          ) : (
+            featured.map((med) => {
+              const gradient = CATEGORY_GRADIENTS[med.category] ?? CATEGORY_GRADIENTS.general;
+              const icon     = CATEGORY_ICONS[med.category]     ?? 'headset-outline';
+              return (
+                <TouchableOpacity
+                  key={med.id}
+                  style={styles.medCard}
+                  onPress={() => navigation.navigate('MeditationDetail', { meditation: med })}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient colors={gradient} style={styles.medIconBox}>
+                    <Ionicons name={icon} size={22} color={P.white} />
+                  </LinearGradient>
+                  <View style={styles.medInfo}>
+                    <Text style={styles.medTitle} numberOfLines={1}>{med.title}</Text>
+                    <Text style={styles.medMeta} numberOfLines={1}>
+                      {med.category?.charAt(0).toUpperCase() + med.category?.slice(1)}
+                      {med.difficulty ? ` · ${med.difficulty}` : ''}
                     </Text>
                   </View>
-                  <View style={styles.durationBadge}>
-                    <Ionicons name="headset" size={16} color={colors.white} />
-                    <Text style={styles.durationText}>{meditation.duration}m</Text>
+                  <View style={styles.medRight}>
+                    <View style={styles.durBadge}>
+                      <Ionicons name="time-outline" size={11} color={P.teal} />
+                      <Text style={styles.durText}>{med.duration}m</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={P.dimmed} style={{ marginTop: 6 }} />
                   </View>
-                </View>
-
-                <Text style={styles.meditationDescription}>
-                  {meditation.description}
-                </Text>
-
-                <View style={styles.meditationFooter}>
-                  <Ionicons name={meditation.icon} size={32} color={colors.white} />
-                  <View style={styles.playButton}>
-                    <Ionicons name="play" size={16} color={meditation.gradient[0]} />
-                  </View>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
-        {/* Quick Start Button */}
-        <View style={styles.quickStartSection}>
-          <LinearGradient
-            colors={['#1C2B2D', '#116A55']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.quickStartButton}
-          >
-            <Ionicons name="play-circle" size={32} color={colors.white} />
-            <View style={styles.quickStartText}>
-              <Text style={styles.quickStartTitle}>Ready to meditate?</Text>
-              <Text style={styles.quickStartDesc}>Start your session now</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color={colors.white} />
-          </LinearGradient>
-        </View>
-
-        {/* Trending Section */}
+        {/* ── Explore ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trending Now</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.trendingScroll}>
-            {['Sleep', 'Focus', 'Stress', 'Energy'].map((category, index) => (
-              <LinearGradient
-                key={index}
-                colors={
-                  [
-                    ['#1A826B', '#2BB092'],
-                    ['#2A9D8F', '#21867A'],
-                    ['#457B9D', '#1D3557'],
-                    ['#E9C46A', '#F4A261'],
-                  ][index]
-                }
-                style={styles.trendingCard}
-              >
-                <Text style={styles.trendingLabel}>{category}</Text>
-                <Text style={styles.trendingCount}>12+ sessions</Text>
-              </LinearGradient>
+          <Text style={styles.sectionTitle}>Explore</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14 }} contentContainerStyle={{ gap: 12, paddingRight: 4 }}>
+            {EXPLORE_CATS.map(cat => (
+              <TouchableOpacity key={cat.key} activeOpacity={0.85} onPress={() => navigation.navigate('Meditate', { filterCategory: cat.key })}>
+                <LinearGradient colors={cat.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.catCard}>
+                  <View style={styles.catGlow} />
+                  <Text style={styles.catEmoji}>{cat.emoji}</Text>
+                  <Text style={styles.catLabel}>{cat.label}</Text>
+                  <Text style={styles.catCount}>{meditations.filter(m => m.category === cat.key).length} sessions</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
+
+        {/* ── Tip ── */}
+        <View style={styles.tipCard}>
+          <LinearGradient colors={[P.teal, P.purpleSoft]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.tipBar} />
+          <View style={styles.tipBody}>
+            <Text style={styles.tipTitle}>💡  Mindfulness Tip</Text>
+            <Text style={styles.tipText}>Even 5 minutes of daily meditation can significantly reduce stress and sharpen focus over time.</Text>
+          </View>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FAFBFC',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFBFC',
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.xl,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  notificationIcon: {
-    padding: spacing.sm,
-  },
-  notificationBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...shadows.medium,
-  },
-  quoteCard: {
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  quoteContent: {
-    alignItems: 'center',
-  },
-  quoteText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.white,
-    textAlign: 'center',
-    marginVertical: spacing.md,
-    lineHeight: 24,
-  },
-  quoteDots: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.white,
-    opacity: 0.6,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    alignItems: 'center',
-    ...shadows.light,
-  },
-  statIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: borderRadius.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginTop: spacing.xs,
-  },
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  seeAll: {
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  meditationCardWrapper: {
-    marginBottom: spacing.md,
-  },
-  meditationCard: {
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    ...shadows.medium,
-  },
-  meditationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  meditationTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.white,
-    marginBottom: spacing.xs,
-  },
-  meditationSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  durationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-    gap: spacing.xs,
-  },
-  durationText: {
-    color: colors.white,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  meditationDescription: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: spacing.lg,
-    lineHeight: 20,
-  },
-  meditationFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  playButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quickStartSection: {
-    marginBottom: spacing.xl,
-  },
-  quickStartButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.lg,
-    ...shadows.medium,
-    gap: spacing.md,
-  },
-  quickStartText: {
-    flex: 1,
-  },
-  quickStartTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  quickStartDesc: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: spacing.xs,
-  },
-  trendingScroll: {
-    marginTop: spacing.md,
-  },
-  trendingCard: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    marginRight: spacing.md,
-    justifyContent: 'center',
-    ...shadows.light,
-    minWidth: 120,
-  },
-  trendingLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  trendingCount: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: spacing.xs,
-  },
+  root:   { flex: 1 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
+
+  glowTeal:   { position: 'absolute', top: -60, right: -60, width: 240, height: 240, borderRadius: 120, backgroundColor: P.teal,   opacity: 0.06 },
+  glowPurple: { position: 'absolute', bottom: 100, left: -80, width: 260, height: 260, borderRadius: 130, backgroundColor: P.purple, opacity: 0.06 },
+
+  // Header
+  header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
+  greeting: { fontSize: 13, color: P.muted, fontWeight: '500', marginBottom: 2 },
+  userName: { fontSize: 26, fontWeight: '800', color: P.white, letterSpacing: -0.5 },
+  avatar:   { width: 46, height: 46, borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: P.teal, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+
+  // Stats
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  statCard: { flex: 1, backgroundColor: P.navyCard, borderRadius: 18, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: P.glassBorder },
+  statIcon: { width: 38, height: 38, borderRadius: 11, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  statValue:{ fontSize: 20, fontWeight: '800', marginBottom: 2 },
+  statLabel:{ fontSize: 10, color: P.muted, fontWeight: '600', textAlign: 'center' },
+
+  // Quote
+  quoteCard:  { flexDirection: 'row', backgroundColor: P.navyCard, borderRadius: 20, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: P.glassBorder },
+  quoteLine:  { width: 4 },
+  quoteBody:  { flex: 1, padding: 18 },
+  quoteBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  quoteStar:  { fontSize: 10, color: P.teal },
+  quoteBadge: { fontSize: 10, color: P.teal, fontWeight: '700', letterSpacing: 1.5 },
+  quoteText:  { fontSize: 15, color: P.white, fontWeight: '500', lineHeight: 24, marginBottom: 8, fontStyle: 'italic' },
+  quoteAuthor:{ fontSize: 12, color: P.muted },
+
+  // Quick Start
+  quickCard:    { borderRadius: 22, padding: 22, marginBottom: 28, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', shadowColor: P.teal, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 10 },
+  quickGlowDot: { position: 'absolute', top: -30, right: 60, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.1)' },
+  quickLeft:    { flex: 1 },
+  quickLabel:   { fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  quickTitle:   { fontSize: 18, fontWeight: '800', color: P.white, marginBottom: 2 },
+  quickSub:     { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
+  quickPlayBtn: { width: 50, height: 50, borderRadius: 16, backgroundColor: P.white, justifyContent: 'center', alignItems: 'center' },
+
+  // Section
+  section:     { marginBottom: 28 },
+  sectionRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle:{ fontSize: 17, fontWeight: '800', color: P.white, letterSpacing: -0.3 },
+  seeAll:      { fontSize: 13, color: P.teal, fontWeight: '600' },
+
+  emptyBox:   { backgroundColor: P.navyCard, borderRadius: 20, padding: 32, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: P.glassBorder },
+  emptyEmoji: { fontSize: 36 },
+  emptyText:  { fontSize: 14, color: P.muted },
+
+  // Med Cards
+  medCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: P.navyCard, borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: P.glassBorder },
+  medIconBox: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  medInfo:    { flex: 1 },
+  medTitle:   { fontSize: 15, fontWeight: '700', color: P.white, marginBottom: 4 },
+  medMeta:    { fontSize: 12, color: P.muted, textTransform: 'capitalize' },
+  medRight:   { alignItems: 'flex-end' },
+  durBadge:   { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(45,212,191,0.12)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
+  durText:    { fontSize: 11, color: P.teal, fontWeight: '700' },
+
+  // Categories
+  catCard:  { width: 120, height: 120, borderRadius: 22, padding: 16, justifyContent: 'flex-end', overflow: 'hidden' },
+  catGlow:  { position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.1)' },
+  catEmoji: { fontSize: 26, marginBottom: 6 },
+  catLabel: { fontSize: 13, fontWeight: '800', color: P.white, marginBottom: 2 },
+  catCount: { fontSize: 10, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
+
+  // Tip
+  tipCard: { flexDirection: 'row', backgroundColor: P.navyCard, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: P.glassBorder },
+  tipBar:  { width: 4 },
+  tipBody: { flex: 1, padding: 18 },
+  tipTitle:{ fontSize: 14, fontWeight: '700', color: P.white, marginBottom: 6 },
+  tipText: { fontSize: 12, color: P.muted, lineHeight: 18 },
 });
 
 export default HomeScreen;

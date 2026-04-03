@@ -1,628 +1,222 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Linking,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { borderRadius, colors, shadows, spacing } from '../../styles/theme';
 
-const counselors = [
-  {
-    id: 1,
-    name: 'Dr. Sarah Johnson',
-    specialty: 'Anxiety & Depression',
-    experience: '10 years',
-    rating: 4.9,
-    reviews: 324,
-    hourlyRate: '$50',
-    availability: 'Available Today',
-    avatar: '👩‍⚕️',
-    bio: 'Specializing in anxiety, depression, and stress management',
-    languages: ['English', 'Spanish'],
-    certifications: ['PhD', 'Therapist', 'Counselor'],
-  },
-  {
-    id: 2,
-    name: 'James Miller',
-    specialty: 'Work & Life Balance',
-    experience: '8 years',
-    rating: 4.8,
-    reviews: 256,
-    hourlyRate: '$45',
-    availability: 'Available in 2 hours',
-    avatar: '👨‍⚕️',
-    bio: 'Expert in helping with work stress and life transitions',
-    languages: ['English'],
-    certifications: ['Masters', 'Therapist'],
-  },
-  {
-    id: 3,
-    name: 'Elena Rodriguez',
-    specialty: 'Mindfulness & Sleep',
-    experience: '12 years',
-    rating: 4.7,
-    reviews: 412,
-    hourlyRate: '$55',
-    availability: 'Available Tomorrow',
-    avatar: '👩‍⚕️',
-    bio: 'Specializing in mindfulness meditation and sleep issues',
-    languages: ['English', 'Spanish', 'Portuguese'],
-    certifications: ['PhD', 'Therapist', 'Mindfulness Coach'],
-  },
-  {
-    id: 4,
-    name: 'Michael Chen',
-    specialty: 'Relationships & Communication',
-    experience: '7 years',
-    rating: 4.8,
-    reviews: 189,
-    hourlyRate: '$48',
-    availability: 'Available Today',
-    avatar: '👨‍⚕️',
-    bio: 'Expert in relationship counseling and communication skills',
-    languages: ['English', 'Mandarin'],
-    certifications: ['Masters', 'Therapist'],
-  },
+const P = {
+  teal:        '#2DD4BF',
+  tealDark:    '#0F766E',
+  tealDeep:    '#134E4A',
+  navy:        '#0A1628',
+  navyMid:     '#112240',
+  navyCard:    '#162035',
+  purple:      '#7C3AED',
+  purpleSoft:  '#A78BFA',
+  pink:        '#EC4899',
+  amber:       '#F59E0B',
+  white:       '#FFFFFF',
+  muted:       '#94A3B8',
+  dimmed:      '#475569',
+  glass:       'rgba(255,255,255,0.05)',
+  glassBorder: 'rgba(255,255,255,0.08)',
+  error:       '#F87171',
+};
+
+export const CRISIS_LINES = [
+  { id: 1, name: 'TPO Nepal',                   role: 'Suicide Prevention Hotline',   number: '16600102005',    available: '8am – 8pm',  free: true,  color: P.pink,       icon: 'heart-outline'        },
+  { id: 2, name: 'CMC Nepal',                   role: 'Mental Health Counselling',     number: '16600185080',    available: 'Office hrs', free: true,  color: P.teal,       icon: 'medical-outline'      },
+  { id: 3, name: 'Mental Health Society Nepal', role: 'Psychosocial Support',          number: '+9779851223769', available: '24/7',       free: false, color: P.purpleSoft, icon: 'people-outline'       },
+  { id: 4, name: 'Patan Hospital',              role: 'Psychiatric Emergency',         number: '9813476123',     available: '24/7',       free: false, color: P.amber,      icon: 'shield-outline'       },
+  { id: 5, name: 'Nepal Emergency',             role: 'Emergency Services',            number: '100',            available: '24/7',       free: true,  color: P.error,      icon: 'alert-circle-outline' },
+];
+
+const WEBSITES = [
+  { id: 6, name: 'KOSHISH Nepal',       role: 'Mental health & psychosocial support', url: 'https://www.koshishnepal.org',  color: P.purpleSoft, icon: 'heart-outline' },
+  { id: 7, name: 'Nepal Mental Health', role: 'Free online counselling & resources',  url: 'https://nepalmentalhealth.com', color: P.teal,       icon: 'globe-outline' },
 ];
 
 const CallSupportScreen = ({ navigation }) => {
-  const [selectedCounselor, setSelectedCounselor] = useState(null);
 
-  const handleBooking = (counselor) => {
-    Alert.alert(
-      'Booking Confirmed',
-      `You have successfully booked a session with ${counselor.name}\n\nTime: 30 minutes from now\nRate: ${counselor.hourlyRate}/hour\n\nA confirmation has been sent to your email.`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setSelectedCounselor(null);
-          },
-        },
-      ]
-    );
-  };
+  const goToDial = (line) => navigation.navigate('Dialing', { line });
 
-  const handleEmergencyCall = () => {
-    Alert.alert(
-      'Emergency Support',
-      'If you are in crisis, please contact:\n\n🚨 National Crisis Hotline: 1-800-273-8255\n\nWould you like to be connected to immediate support?',
-      [
-        { text: 'Cancel', onPress: () => {} },
-        {
-          text: 'Call Now',
-          onPress: () => Alert.alert('Connecting...', 'Connecting you to support services'),
-        },
-      ]
-    );
-  };
-
-  // Counselor Detail View
-  if (selectedCounselor) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <TouchableOpacity
-            onPress={() => setSelectedCounselor(null)}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={28} color={colors.primary} />
-          </TouchableOpacity>
-
-          {/* Counselor Card */}
-          <LinearGradient
-            colors={['#8B7FD9', '#A89FE0']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.counselorHeader}
-          >
-            <Text style={styles.avatar}>{selectedCounselor.avatar}</Text>
-            <Text style={styles.counselorName}>{selectedCounselor.name}</Text>
-            <Text style={styles.specialty}>{selectedCounselor.specialty}</Text>
-            <View style={styles.ratingSection}>
-              <Ionicons name="star" size={16} color="#FFD700" />
-              <Text style={styles.ratingText}>
-                {selectedCounselor.rating} ({selectedCounselor.reviews} reviews)
-              </Text>
-            </View>
-          </LinearGradient>
-
-          {/* Info Sections */}
-          <View style={styles.infoSection}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Ionicons name="briefcase" size={18} color={colors.primary} />
-                <View>
-                  <Text style={styles.infoLabel}>Experience</Text>
-                  <Text style={styles.infoValue}>{selectedCounselor.experience}</Text>
-                </View>
-              </View>
-              <View style={styles.infoItem}>
-                <Ionicons name="cash" size={18} color={colors.primary} />
-                <View>
-                  <Text style={styles.infoLabel}>Hourly Rate</Text>
-                  <Text style={styles.infoValue}>{selectedCounselor.hourlyRate}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.infoRow}>
-              <View style={styles.infoItem}>
-                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                <View>
-                  <Text style={styles.infoLabel}>Availability</Text>
-                  <Text style={styles.infoValue}>{selectedCounselor.availability}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Bio */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <Text style={styles.bio}>{selectedCounselor.bio}</Text>
-          </View>
-
-          {/* Languages */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Languages</Text>
-            <View style={styles.tagsContainer}>
-              {selectedCounselor.languages.map((lang, index) => (
-                <View key={index} style={styles.tag}>
-                  <Text style={styles.tagText}>{lang}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Certifications */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Certifications</Text>
-            <View style={styles.tagsContainer}>
-              {selectedCounselor.certifications.map((cert, index) => (
-                <View
-                  key={index}
-                  style={[styles.tag, { backgroundColor: colors.primary + '20' }]}
-                >
-                  <Text style={[styles.tagText, { color: colors.primary }]}>
-                    {cert}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Booking Button */}
-          <LinearGradient
-            colors={['#4ECDC4', '#45B7AA']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.bookButton}
-          >
-            <TouchableOpacity
-              style={styles.bookButtonContent}
-              onPress={() => handleBooking(selectedCounselor)}
-            >
-              <Ionicons name="calendar" size={20} color={colors.white} />
-              <Text style={styles.bookButtonText}>Book Session Now</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Main Support Screen
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+    <SafeAreaView style={s.root}>
+      <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
+      <View style={s.glowTeal} />
+      <View style={s.glowPurple} />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={28} color={colors.primary} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Call Support</Text>
-          <View style={{ width: 28 }} />
+        <View style={s.header}>
+          <Text style={s.headerLabel}>MENTAL WELLNESS</Text>
+          <Text style={s.headerTitle}>Support Lines</Text>
+          <Text style={s.headerSub}>Real help from real people — anytime</Text>
         </View>
 
         {/* Emergency Banner */}
-        <TouchableOpacity
-          style={styles.emergencyBanner}
-          onPress={handleEmergencyCall}
-        >
-          <LinearGradient
-            colors={['#FF6B9D', '#FF5E8A']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.emergencyContent}
-          >
-            <Ionicons name="alert-circle" size={24} color={colors.white} />
-            <View style={{ flex: 1, marginLeft: spacing.lg }}>
-              <Text style={styles.emergencyTitle}>Need Immediate Help?</Text>
-              <Text style={styles.emergencyText}>
-                24/7 Crisis support available
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.white} />
-          </LinearGradient>
+        <TouchableOpacity onPress={() => goToDial(CRISIS_LINES[0])} activeOpacity={0.88} style={s.emergency}>
+          <LinearGradient colors={[P.pink, '#BE185D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFillObject} />
+          <View style={s.emergencyGlow} />
+          <View style={s.emergencyIconBox}>
+            <Ionicons name="alert-circle" size={26} color={P.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.emergencyTitle}>Need Immediate Help?</Text>
+            <Text style={s.emergencySub}>Tap to call TPO Nepal — it's free</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
 
-        {/* Info Cards */}
-        <View style={styles.infoCards}>
-          <View style={styles.infoCard}>
-            <Ionicons name="videocam" size={24} color="#4ECDC4" />
-            <Text style={styles.infoCardTitle}>Video Calls</Text>
-            <Text style={styles.infoCardText}>1-on-1 video sessions</Text>
-          </View>
-          <View style={styles.infoCard}>
-            <Ionicons name="time" size={24} color="#8B7FD9" />
-            <Text style={styles.infoCardTitle}>Flexible</Text>
-            <Text style={styles.infoCardText}>Book at your pace</Text>
-          </View>
-          <View style={styles.infoCard}>
-            <Ionicons name="lock-closed" size={24} color="#FFB6C1" />
-            <Text style={styles.infoCardTitle}>Private</Text>
-            <Text style={styles.infoCardText}>100% Confidential</Text>
-          </View>
+        {/* Pills */}
+        <View style={s.pillsRow}>
+          {[
+            { icon: 'lock-closed-outline', label: 'Confidential', color: P.teal },
+            { icon: 'call-outline',        label: 'Free to call',  color: P.purpleSoft },
+            { icon: 'heart-outline',       label: 'Non-judgement', color: P.pink },
+          ].map((f, i) => (
+            <View key={i} style={s.pill}>
+              <Ionicons name={f.icon} size={15} color={f.color} />
+              <Text style={s.pillText}>{f.label}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Counselors List */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available Counselors</Text>
-          <Text style={styles.sectionSubtitle}>
-            Connect with certified mental health professionals
-          </Text>
-
-          {counselors.map((counselor) => (
-            <TouchableOpacity
-              key={counselor.id}
-              style={styles.counselorCard}
-              onPress={() => setSelectedCounselor(counselor)}
-            >
-              <View style={styles.counselorLeft}>
-                <Text style={styles.counselorAvatar}>{counselor.avatar}</Text>
+        {/* Crisis Lines */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Crisis Support Lines</Text>
+          <Text style={s.sectionSub}>Tap any line to call</Text>
+          {CRISIS_LINES.map(line => (
+            <TouchableOpacity key={line.id} style={s.lineCard} onPress={() => goToDial(line)} activeOpacity={0.88}>
+              <View style={[s.lineAccent, { backgroundColor: line.color }]} />
+              <View style={[s.lineIconBox, { backgroundColor: line.color + '18' }]}>
+                <Ionicons name={line.icon} size={22} color={line.color} />
               </View>
-
-              <View style={styles.counselorCenter}>
-                <Text style={styles.counselorCardName}>{counselor.name}</Text>
-                <Text style={styles.counselorSpecialty}>
-                  {counselor.specialty}
-                </Text>
-                <View style={styles.counselorMeta}>
-                  <Ionicons name="star" size={14} color="#FFD700" />
-                  <Text style={styles.metaText}>
-                    {counselor.rating} • {counselor.experience}
-                  </Text>
+              <View style={s.lineInfo}>
+                <View style={s.lineTopRow}>
+                  <Text style={s.lineName}>{line.name}</Text>
+                  {line.free && <View style={s.freeBadge}><Text style={s.freeBadgeText}>FREE</Text></View>}
+                </View>
+                <Text style={s.lineRole}>{line.role}</Text>
+                <View style={s.lineMeta}>
+                  <Ionicons name="time-outline" size={11} color={P.dimmed} />
+                  <Text style={s.lineMetaText}>{line.available}</Text>
+                  <View style={s.lineDot} />
+                  <Text style={s.lineNum}>{line.number}</Text>
                 </View>
               </View>
-
-              <View style={styles.counselorRight}>
-                <Text style={styles.hourlyRate}>{counselor.hourlyRate}</Text>
-                <Text style={styles.availabilityText}>✓ Now</Text>
+              <View style={[s.callBtn, { backgroundColor: line.color }]}>
+                <Ionicons name="call" size={16} color={P.white} />
               </View>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* How It Works */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How It Works</Text>
-          <View style={styles.stepContainer}>
+        {/* Websites */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Online Resources</Text>
+          <Text style={s.sectionSub}>Tap to open in browser</Text>
+          {WEBSITES.map(site => (
+            <TouchableOpacity key={site.id} style={s.lineCard} onPress={() => Linking.openURL(site.url).catch(() => {})} activeOpacity={0.88}>
+              <View style={[s.lineAccent, { backgroundColor: site.color }]} />
+              <View style={[s.lineIconBox, { backgroundColor: site.color + '18' }]}>
+                <Ionicons name={site.icon} size={22} color={site.color} />
+              </View>
+              <View style={s.lineInfo}>
+                <Text style={s.lineName}>{site.name}</Text>
+                <Text style={s.lineRole}>{site.role}</Text>
+                <Text style={[s.lineNum, { marginTop: 4 }]}>{site.url}</Text>
+              </View>
+              <View style={[s.callBtn, { backgroundColor: site.color }]}>
+                <Ionicons name="open-outline" size={16} color={P.white} />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* How it works */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>How It Works</Text>
+          <View style={s.stepsCard}>
             {[
-              { icon: 'person', title: 'Choose Counselor', desc: 'Select from verified professionals' },
-              { icon: 'calendar', title: 'Book Session', desc: 'Pick a convenient time' },
-              { icon: 'videocam', title: 'Video Call', desc: 'Private 1-on-1 session' },
-              { icon: 'checkmark', title: 'Get Support', desc: 'Professional guidance & care' },
-            ].map((step, index) => (
-              <View key={index} style={styles.step}>
-                <View style={styles.stepIcon}>
-                  <Ionicons name={step.icon} size={20} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.stepTitle}>{step.title}</Text>
-                  <Text style={styles.stepDesc}>{step.desc}</Text>
+              { icon: 'hand-left-outline',  title: 'Choose a line',  desc: 'Pick the helpline that fits your need', color: P.teal },
+              { icon: 'call-outline',       title: 'Tap Call',       desc: 'Review details and confirm',            color: P.purpleSoft },
+              { icon: 'chatbubble-outline', title: 'Talk freely',    desc: 'Everything you say stays private',      color: P.pink },
+              { icon: 'heart-outline',      title: 'Get support',    desc: 'Receive guidance and next steps',       color: P.amber },
+            ].map((step, i) => (
+              <View key={i} style={[s.stepRow, i > 0 && s.stepBorder]}>
+                <LinearGradient colors={[step.color + '30', step.color + '10']} style={s.stepIconBox}>
+                  <Ionicons name={step.icon} size={20} color={step.color} />
+                </LinearGradient>
+                <View style={s.stepText}>
+                  <Text style={s.stepTitle}>{step.title}</Text>
+                  <Text style={s.stepDesc}>{step.desc}</Text>
                 </View>
               </View>
             ))}
           </View>
         </View>
+
+        <View style={s.noteCard}>
+          <Ionicons name="information-circle-outline" size={18} color={P.purpleSoft} />
+          <Text style={s.noteText}>Reaching out is a sign of strength. You deserve to feel better. 💙</Text>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FAFBFC',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFBFC',
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  emergencyBanner: {
-    marginBottom: spacing.xl,
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    ...shadows.medium,
-  },
-  emergencyContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  emergencyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  emergencyText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: spacing.xs,
-  },
-  infoCards: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  infoCard: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    alignItems: 'center',
-    ...shadows.light,
-  },
-  infoCardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-    marginTop: spacing.sm,
-  },
-  infoCardText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    textAlign: 'center',
-  },
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: spacing.lg,
-  },
-  counselorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    ...shadows.light,
-  },
-  counselorLeft: {
-    marginRight: spacing.lg,
-  },
-  counselorAvatar: {
-    fontSize: 40,
-  },
-  counselorCenter: {
-    flex: 1,
-  },
-  counselorCardName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  counselorSpecialty: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  counselorMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  metaText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  counselorRight: {
-    alignItems: 'flex-end',
-  },
-  hourlyRate: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.primary,
-    marginBottom: spacing.xs,
-  },
-  availabilityText: {
-    fontSize: 11,
-    color: colors.success,
-    fontWeight: '600',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    ...shadows.light,
-  },
-  counselorHeader: {
-    borderRadius: borderRadius.lg,
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  avatar: {
-    fontSize: 64,
-    marginBottom: spacing.md,
-  },
-  counselorName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.white,
-    marginBottom: spacing.xs,
-  },
-  specialty: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: spacing.md,
-  },
-  ratingSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  ratingText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '600',
-  },
-  infoSection: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    ...shadows.light,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.lg,
-    gap: spacing.lg,
-  },
-  infoItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  infoLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '700',
-    marginTop: spacing.xs,
-  },
-  bio: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  tag: {
-    backgroundColor: '#F0F8F8',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-  },
-  tagText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  bookButton: {
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    marginBottom: spacing.xl,
-  },
-  bookButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
-  },
-  bookButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  stepContainer: {
-    gap: spacing.md,
-  },
-  step: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    ...shadows.light,
-  },
-  stepIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    backgroundColor: '#F0F8F8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  stepTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  stepDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
+const s = StyleSheet.create({
+  root:   { flex: 1 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 48 },
+  glowTeal:   { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: P.teal,   opacity: 0.06 },
+  glowPurple: { position: 'absolute', bottom: 80, left: -80, width: 240, height: 240, borderRadius: 120, backgroundColor: P.purple, opacity: 0.06 },
+  header:       { marginBottom: 22 },
+  headerLabel:  { fontSize: 11, color: P.teal, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  headerTitle:  { fontSize: 28, fontWeight: '800', color: P.white, letterSpacing: -0.5, marginBottom: 4 },
+  headerSub:    { fontSize: 13, color: P.muted },
+  emergency:      { flexDirection: 'row', alignItems: 'center', borderRadius: 20, padding: 18, marginBottom: 20, overflow: 'hidden', shadowColor: P.pink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8 },
+  emergencyGlow:  { position: 'absolute', top: -20, right: 50, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.1)' },
+  emergencyIconBox:{ width: 46, height: 46, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  emergencyTitle: { fontSize: 15, fontWeight: '700', color: P.white, marginBottom: 2 },
+  emergencySub:   { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
+  pillsRow: { flexDirection: 'row', gap: 8, marginBottom: 28 },
+  pill:     { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: P.navyCard, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center' },
+  pillText: { fontSize: 10, color: P.muted, fontWeight: '600' },
+  section:      { marginBottom: 28 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: P.white, marginBottom: 4 },
+  sectionSub:   { fontSize: 12, color: P.muted, marginBottom: 14 },
+  lineCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: P.navyCard, borderRadius: 18, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: P.glassBorder, overflow: 'hidden' },
+  lineAccent:  { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: 18, borderBottomLeftRadius: 18 },
+  lineIconBox: { width: 46, height: 46, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginLeft: 8, marginRight: 12 },
+  lineInfo:    { flex: 1 },
+  lineTopRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+  lineName:    { fontSize: 14, fontWeight: '700', color: P.white },
+  freeBadge:   { backgroundColor: 'rgba(52,211,153,0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  freeBadgeText:{ fontSize: 9, color: '#34D399', fontWeight: '800', letterSpacing: 0.5 },
+  lineRole:    { fontSize: 12, color: P.muted, marginBottom: 6 },
+  lineMeta:    { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  lineMetaText:{ fontSize: 11, color: P.dimmed },
+  lineDot:     { width: 3, height: 3, borderRadius: 2, backgroundColor: P.dimmed },
+  lineNum:     { fontSize: 11, color: P.teal, fontWeight: '700' },
+  callBtn:     { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
+  stepsCard:   { backgroundColor: P.navyCard, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: P.glassBorder },
+  stepRow:     { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  stepBorder:  { borderTopWidth: 1, borderTopColor: P.glassBorder },
+  stepIconBox: { width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
+  stepText:    { flex: 1 },
+  stepTitle:   { fontSize: 14, fontWeight: '700', color: P.white, marginBottom: 2 },
+  stepDesc:    { fontSize: 12, color: P.muted, lineHeight: 17 },
+  noteCard:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: 'rgba(124,62,237,0.08)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#7C3AED30' },
+  noteText:    { flex: 1, fontSize: 13, color: P.muted, lineHeight: 20, fontStyle: 'italic' },
 });
 
 export default CallSupportScreen;

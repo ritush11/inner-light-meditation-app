@@ -1,463 +1,438 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
-import { useUser } from '../../context/UserContext';
 import { auth } from '../../firebase/firebaseConfig';
-import { borderRadius, colors, shadows, spacing } from '../../styles/theme';
+import { addFavorite, isFavorite, logMeditationSession, removeFavorite } from '../../firebase/firebaseUtils';
+
+const P = {
+  teal:        '#2DD4BF',
+  tealDark:    '#0F766E',
+  tealDeep:    '#134E4A',
+  navy:        '#0A1628',
+  navyMid:     '#112240',
+  navyCard:    '#162035',
+  purple:      '#7C3AED',
+  purpleSoft:  '#A78BFA',
+  amber:       '#F59E0B',
+  white:       '#FFFFFF',
+  muted:       '#94A3B8',
+  dimmed:      '#475569',
+  glass:       'rgba(255,255,255,0.06)',
+  glassBorder: 'rgba(255,255,255,0.1)',
+  error:       '#F87171',
+  success:     '#34D399',
+};
+
+const CAT_GRADIENTS = {
+  focus:       ['#0d4f6e', '#1a8a9a'],
+  sleep:       ['#2d1b69', '#7b2d8b'],
+  mindfulness: ['#0f4c2a', '#1a8a5a'],
+  morning:     ['#7b3a0d', '#c45e1a'],
+  anxiety:     ['#1a2d7b', '#5e3aad'],
+  stress:      ['#5e1a3a', '#ad2d6e'],
+  breathing:   ['#0d3d6e', '#1a6aaa'],
+  relaxation:  ['#0d5e4f', '#1aaa8a'],
+  sounds:      ['#0d4a3d', '#1a8a7a'],
+  general:     ['#1a3a5e', '#2d6aaa'],
+};
+
+const CAT_ICONS = {
+  focus:       'bulb-outline',
+  sleep:       'moon-outline',
+  mindfulness: 'leaf-outline',
+  morning:     'sunny-outline',
+  anxiety:     'heart-outline',
+  stress:      'water-outline',
+  breathing:   'fitness-outline',
+  relaxation:  'body-outline',
+  sounds:      'musical-notes-outline',
+  general:     'headset-outline',
+};
+
+// Reliable fallback audio per category
+const FALLBACK_AUDIO = {
+  sleep:       'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bbd.mp3',
+  focus:       'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+  breathing:   'https://cdn.pixabay.com/download/audio/2021/11/01/audio_cb756dd941.mp3',
+  morning:     'https://cdn.pixabay.com/download/audio/2022/10/25/audio_946ef970a0.mp3',
+  anxiety:     'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3',
+  stress:      'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3',
+  mindfulness: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+  relaxation:  'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+  sounds:      'https://cdn.pixabay.com/download/audio/2022/05/13/audio_257112ce94.mp3',
+  general:     'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+};
+
+const fmt = (ms) => {
+  const s = Math.floor((ms ?? 0) / 1000);
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+};
+
+const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
 
 const MeditationDetailScreen = ({ route, navigation }) => {
   const { meditation } = route.params;
-  const { addMeditationSession } = useUser();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isFavorite, setIsFavorite] = useState(false);
 
+  const soundRef    = useRef(null);
+  const intervalRef = useRef(null);
+
+  const [isLoading, setIsLoading]   = useState(false);
+  const [isPlaying, setIsPlaying]   = useState(false);
+  const [position, setPosition]     = useState(0);
+  const [duration, setDuration]     = useState((meditation.duration ?? 10) * 60 * 1000);
+  const [audioReady, setAudioReady] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+  const [favorited, setFavorited]   = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+
+  const catKey   = meditation.category?.toLowerCase() ?? 'general';
+  const gradient = meditation.gradient ?? CAT_GRADIENTS[catKey] ?? CAT_GRADIENTS.general;
+  const icon     = CAT_ICONS[catKey] ?? 'headset-outline';
+  const audioUrl = meditation.audioUrl ?? FALLBACK_AUDIO[catKey] ?? FALLBACK_AUDIO.general;
+  const pct      = duration > 0 ? Math.min((position / duration) * 100, 100) : 0;
+  const isSoundscape = meditation.type === 'soundscape';
+
+  // Check favorite
   useEffect(() => {
-    if (isPlaying) {
-      const interval = setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev >= meditation.duration * 60) {
-            setIsPlaying(false);
-            return meditation.duration * 60;
-          }
-          return prev + 1;
-        });
-      }, 1000);
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    isFavorite(uid, meditation.firestoreId ?? meditation.id)
+      .then(r => setFavorited(r))
+      .catch(() => {});
+  }, []);
 
-      return () => clearInterval(interval);
-    }
-  }, [isPlaying, meditation.duration]);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearInterval(intervalRef.current);
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleSessionComplete = async () => {
+  // ── Load audio ──────────────────────────────────────────────
+  const loadAudio = async () => {
+    if (audioReady || isLoading) return;
+    setIsLoading(true);
+    setAudioError(null);
     try {
-      await addMeditationSession(auth.currentUser.uid, {
-        meditationId: meditation.id,
-        title: meditation.title,
-        duration: meditation.duration,
-        completedAt: new Date(),
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS:         false,
+        staysActiveInBackground:    true,
+        playsInSilentModeIOS:       true,
+        shouldDuckAndroid:          true,
+        playThroughEarpieceAndroid: false,
       });
 
-      Alert.alert(
-        'Great Job!',
-        `You completed ${meditation.title}! Keep up the mindfulness practice.`,
-        [
-          {
-            text: 'Done',
-            onPress: () => navigation.goBack(),
-          },
-        ]
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
+      const { sound, status } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        {
+          shouldPlay:  true,
+          isLooping:   isSoundscape,
+          volume:      1.0,
+          progressUpdateIntervalMillis: 500,
+        },
+        onPlaybackStatusUpdate
       );
 
-      setIsPlaying(false);
-      setCurrentTime(0);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save session. Please try again.');
+      soundRef.current = sound;
+      setAudioReady(true);
+      setIsPlaying(true);
+
+      if (status.durationMillis) setDuration(status.durationMillis);
+    } catch (err) {
+      console.error('Audio load error:', err.message);
+      setAudioError('Could not load audio. Please check your connection.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const progressPercentage =
-    meditation && meditation.duration 
-      ? (currentTime / (meditation.duration * 60)) * 100 
-      : 0;
+  // ── Playback status callback ────────────────────────────────
+  const onPlaybackStatusUpdate = (status) => {
+    if (!status.isLoaded) return;
+    setPosition(status.positionMillis ?? 0);
+    setIsPlaying(status.isPlaying ?? false);
+    if (status.durationMillis) setDuration(status.durationMillis);
+
+    // Auto-save session when 80% complete
+    if (
+      status.durationMillis &&
+      status.positionMillis / status.durationMillis >= 0.8 &&
+      !sessionSaved
+    ) {
+      setSessionSaved(true);
+      handleSaveSession();
+    }
+  };
+
+  // ── Play / Pause ────────────────────────────────────────────
+  const handlePlayPause = async () => {
+    if (!audioReady) {
+      await loadAudio();
+      return;
+    }
+    try {
+      if (isPlaying) {
+        await soundRef.current?.pauseAsync();
+      } else {
+        await soundRef.current?.playAsync();
+      }
+    } catch (err) {
+      setAudioError('Playback error. Please try again.');
+    }
+  };
+
+  // ── Restart ─────────────────────────────────────────────────
+  const handleRestart = async () => {
+    try {
+      await soundRef.current?.setPositionAsync(0);
+      await soundRef.current?.playAsync();
+      setSessionSaved(false);
+    } catch {}
+  };
+
+  // ── Save session to Firestore ────────────────────────────────
+  const handleSaveSession = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    try {
+      await logMeditationSession(uid, {
+        meditationId:    meditation.firestoreId ?? meditation.id,
+        meditationTitle: meditation.title,
+        duration:        meditation.duration ?? Math.round(duration / 60000),
+        category:        meditation.category,
+      });
+    } catch (err) {
+      console.error('Session save error:', err.message);
+    }
+  };
+
+  // ── Favorite toggle ──────────────────────────────────────────
+  const handleFavorite = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const id = meditation.firestoreId ?? meditation.id;
+    try {
+      if (favorited) { await removeFavorite(uid, id); setFavorited(false); }
+      else           { await addFavorite(uid, id);    setFavorited(true); }
+    } catch {}
+  };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="chevron-back" size={28} color={colors.primary} />
+    <SafeAreaView style={styles.root}>
+      <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
+        {/* Back */}
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <View style={styles.backCircle}>
+            <Ionicons name="chevron-back" size={22} color={P.white} />
+          </View>
         </TouchableOpacity>
 
-        <LinearGradient
-          colors={meditation.gradient || ['#1A826B', '#2BB092']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.artContainer}
-        >
-          <View style={styles.meditationIcon}>
-            <Ionicons name={meditation.icon} size={80} color={colors.white} />
+        {/* Hero */}
+        <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          <View style={styles.heroRing1} />
+          <View style={styles.heroRing2} />
+          <View style={styles.heroIconBox}>
+            <Ionicons name={icon} size={52} color={P.white} />
           </View>
+          {isSoundscape && (
+            <View style={styles.soundscapeBadge}>
+              <Ionicons name="volume-medium-outline" size={12} color={P.white} />
+              <Text style={styles.soundscapeBadgeText}>Soundscape</Text>
+            </View>
+          )}
         </LinearGradient>
 
-        <View style={styles.infoSection}>
-          <View style={styles.titleRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>{meditation.title}</Text>
-              <Text style={styles.subtitle}>{meditation.subtitle}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.favoriteButton}
-              onPress={() => setIsFavorite(!isFavorite)}
-            >
-              <Ionicons
-                name={isFavorite ? 'heart' : 'heart-outline'}
-                size={28}
-                color={isFavorite ? colors.error : colors.primary}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.description}>
-            {meditation.description ||
-              'This meditation session is designed to help you find peace and clarity. Follow along with the guided instructions for the best experience.'}
-          </Text>
-
-          <View style={styles.infoBar}>
-            <View style={styles.infoItem}>
-              <Ionicons name="time" size={18} color={colors.primary} />
-              <Text style={styles.infoText}>{meditation.duration} min</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="volume-high" size={18} color={colors.primary} />
-              <Text style={styles.infoText}>Guided</Text>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="star" size={18} color={colors.primary} />
-              <Text style={styles.infoText}>4.8★</Text>
-            </View>
-          </View>
-        </View>
-
-        <LinearGradient
-          colors={['#F8F9FA', '#FFFFFF']}
-          style={styles.playerContainer}
-        >
-          <View style={styles.progressContainer}>
-            <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-            <View style={styles.progressBarContainer}>
-              <LinearGradient
-                colors={meditation.gradient || ['#1A826B', '#2BB092']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressBar, { width: `${progressPercentage}%` }]}
-              />
-            </View>
-            <Text style={styles.timeText}>
-              {formatTime(meditation.duration * 60)}
+        {/* Title + Favorite */}
+        <View style={styles.titleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{meditation.title}</Text>
+            <Text style={styles.subtitle}>
+              {cap(meditation.category)} · {cap(meditation.difficulty ?? meditation.level ?? 'Beginner')}
             </Text>
           </View>
+          <TouchableOpacity style={styles.favBtn} onPress={handleFavorite}>
+            <Ionicons
+              name={favorited ? 'heart' : 'heart-outline'}
+              size={22}
+              color={favorited ? P.error : P.muted}
+            />
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.controls}>
-            <TouchableOpacity style={styles.controlButton}>
-              <Ionicons name="play-skip-back" size={24} color={colors.primary} />
-            </TouchableOpacity>
-
-            <LinearGradient
-              colors={meditation.gradient || ['#1A826B', '#2BB092']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[
-                styles.playButton,
-                isPlaying && styles.playButtonActive,
-              ]}
-            >
-              <TouchableOpacity onPress={handlePlayPause}>
-                <Ionicons
-                  name={isPlaying ? 'pause' : 'play'}
-                  size={32}
-                  color={colors.white}
-                />
-              </TouchableOpacity>
-            </LinearGradient>
-
-            <TouchableOpacity style={styles.controlButton}>
-              <Ionicons
-                name="play-skip-forward"
-                size={24}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.volumeControl}>
-            <Ionicons name="volume-low" size={20} color={colors.primary} />
-            <View style={styles.volumeSlider} />
-            <Ionicons name="volume-high" size={20} color={colors.primary} />
-          </View>
-        </LinearGradient>
-
-        <View style={styles.featuresSection}>
-          <Text style={styles.featureTitle}>What to Expect</Text>
+        {/* Stats pills */}
+        <View style={styles.pillsRow}>
           {[
-            'Calming background music',
-            'Clear spoken guidance',
-            'Nature soundscapes',
-            'Relaxation techniques',
-          ].map((feature, index) => (
-            <View key={index} style={styles.featureItem}>
-              <Ionicons
-                name="checkmark-circle"
-                size={18}
-                color={colors.success}
-              />
-              <Text style={styles.featureText}>{feature}</Text>
+            { icon: 'time-outline',   label: `${meditation.duration ?? '?'} min` },
+            { icon: 'mic-outline',    label: (meditation.type ?? 'Guided') },
+            { icon: 'bar-chart-outline', label: cap(meditation.difficulty ?? 'Beginner') },
+          ].map((p, i) => (
+            <View key={i} style={styles.pill}>
+              <Ionicons name={p.icon} size={13} color={P.teal} />
+              <Text style={styles.pillText}>{p.label}</Text>
             </View>
           ))}
         </View>
 
-        <View style={styles.actionsSection}>
-          <LinearGradient
-            colors={meditation.gradient || ['#1A826B', '#2BB092']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.actionButton}
-          >
-            <TouchableOpacity
-              style={styles.buttonContent}
-              onPress={() => {
-                if (!isPlaying && currentTime === 0) {
-                  handlePlayPause();
-                } else if (currentTime >= meditation.duration * 60) {
-                  handleSessionComplete();
-                }
-              }}
-            >
-              <Text style={styles.buttonText}>
-                {isPlaying ? 'Pause & Resume Later' : 'Start Meditation'}
-              </Text>
-            </TouchableOpacity>
-          </LinearGradient>
+        {/* Description */}
+        {meditation.description ? (
+          <View style={styles.descCard}>
+            <Text style={styles.descTitle}>About</Text>
+            <Text style={styles.descText}>{meditation.description}</Text>
+          </View>
+        ) : null}
 
-          {currentTime > 0 && currentTime < meditation.duration * 60 && (
+        {/* Audio Player */}
+        <View style={styles.player}>
+          {/* Progress bar */}
+          <View style={styles.progressTrack}>
+            <LinearGradient
+              colors={[P.teal, P.purpleSoft]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={[styles.progressFill, { width: `${pct}%` }]}
+            />
+          </View>
+          {/* Times */}
+          <View style={styles.timesRow}>
+            <Text style={styles.timeText}>{fmt(position)}</Text>
+            <Text style={styles.timeText}>{fmt(duration)}</Text>
+          </View>
+
+          {/* Error */}
+          {audioError ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle-outline" size={16} color={P.error} />
+              <Text style={styles.errorText}>{audioError}</Text>
+            </View>
+          ) : null}
+
+          {/* Controls */}
+          <View style={styles.controls}>
+            {/* Restart */}
             <TouchableOpacity
-              style={styles.finishButton}
-              onPress={handleSessionComplete}
+              style={styles.ctrlBtn}
+              onPress={handleRestart}
+              disabled={!audioReady}
             >
-              <Text style={styles.finishButtonText}>Finish Now</Text>
+              <Ionicons name="play-skip-back-outline" size={22} color={audioReady ? P.white : P.dimmed} />
             </TouchableOpacity>
+
+            {/* Play / Pause */}
+            <TouchableOpacity
+              style={styles.playBtnWrap}
+              onPress={handlePlayPause}
+              disabled={isLoading}
+              activeOpacity={0.88}
+            >
+              <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.playBtn}>
+                {isLoading ? (
+                  <ActivityIndicator color={P.white} size="large" />
+                ) : (
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={34} color={P.white} />
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Forward 15s */}
+            <TouchableOpacity
+              style={styles.ctrlBtn}
+              onPress={async () => {
+                if (!audioReady) return;
+                const next = Math.min(position + 15000, duration);
+                await soundRef.current?.setPositionAsync(next);
+              }}
+              disabled={!audioReady}
+            >
+              <Ionicons name="play-skip-forward-outline" size={22} color={audioReady ? P.white : P.dimmed} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Session saved indicator */}
+          {sessionSaved && (
+            <View style={styles.savedBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={P.success} />
+              <Text style={styles.savedText}>Session saved to your progress</Text>
+            </View>
           )}
         </View>
+
+        {/* Tip */}
+        <View style={styles.tipCard}>
+          <Ionicons name="information-circle-outline" size={16} color={P.purpleSoft} />
+          <Text style={styles.tipText}>
+            {isSoundscape
+              ? 'Let the sounds wash over you. No need to focus — just relax and breathe.'
+              : 'Find a quiet space, sit comfortably, and follow along at your own pace.'}
+          </Text>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    ...shadows.light,
-  },
-  artContainer: {
-    width: '100%',
-    height: 280,
-    borderRadius: borderRadius.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  meditationIcon: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoSection: {
-    marginBottom: spacing.xl,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  favoriteButton: {
-    padding: spacing.md,
-  },
-  description: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
-  infoBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    ...shadows.light,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoText: {
-    marginLeft: spacing.sm,
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  playerContainer: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  timeText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    minWidth: 40,
-  },
-  progressBarContainer: {
-    flex: 1,
-    height: 4,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.full,
-    marginHorizontal: spacing.md,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: borderRadius.full,
-  },
-  controls: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  controlButton: {
-    paddingHorizontal: spacing.lg,
-  },
-  playButton: {
-    width: 70,
-    height: 70,
-    borderRadius: borderRadius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: spacing.xl,
-    ...shadows.medium,
-  },
-  playButtonActive: {
-    opacity: 0.9,
-  },
-  volumeControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  volumeSlider: {
-    flex: 1,
-    height: 4,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.full,
-    marginHorizontal: spacing.md,
-  },
-  featuresSection: {
-    marginBottom: spacing.xl,
-  },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    ...shadows.light,
-  },
-  featureText: {
-    marginLeft: spacing.md,
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  actionsSection: {
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  actionButton: {
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    ...shadows.medium,
-  },
-  buttonContent: {
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  finishButton: {
-    backgroundColor: colors.white,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    ...shadows.light,
-  },
-  finishButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.primary,
-  },
+  root:   { flex: 1 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 48 },
+
+  backBtn:    { marginBottom: 20 },
+  backCircle: { width: 42, height: 42, borderRadius: 13, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
+
+  hero:        { height: 240, borderRadius: 26, justifyContent: 'center', alignItems: 'center', marginBottom: 24, overflow: 'hidden' },
+  heroRing1:   { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  heroRing2:   { position: 'absolute', width: 280, height: 280, borderRadius: 140, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  heroIconBox: { width: 100, height: 100, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  soundscapeBadge:    { position: 'absolute', bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  soundscapeBadgeText:{ fontSize: 11, color: P.white, fontWeight: '700' },
+
+  titleRow:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
+  title:     { fontSize: 24, fontWeight: '800', color: P.white, marginBottom: 4, letterSpacing: -0.3 },
+  subtitle:  { fontSize: 13, color: P.muted },
+  favBtn:    { width: 42, height: 42, borderRadius: 13, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center', marginLeft: 12 },
+
+  pillsRow:  { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  pill:      { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: P.navyCard, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: P.glassBorder },
+  pillText:  { fontSize: 12, color: P.muted, fontWeight: '600', textTransform: 'capitalize' },
+
+  descCard:  { backgroundColor: P.navyCard, borderRadius: 18, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: P.glassBorder },
+  descTitle: { fontSize: 12, color: P.muted, fontWeight: '700', letterSpacing: 1, marginBottom: 8 },
+  descText:  { fontSize: 14, color: P.muted, lineHeight: 22 },
+
+  // Player
+  player:       { backgroundColor: P.navyCard, borderRadius: 24, padding: 24, marginBottom: 16, borderWidth: 1, borderColor: P.glassBorder },
+  progressTrack:{ height: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  progressFill: { height: '100%', borderRadius: 4 },
+  timesRow:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  timeText:     { fontSize: 12, color: P.muted, fontWeight: '600' },
+  errorBox:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(248,113,113,0.1)', borderRadius: 10, padding: 10, marginBottom: 10 },
+  errorText:    { fontSize: 12, color: P.error, flex: 1 },
+  controls:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 8 },
+  ctrlBtn:      { width: 48, height: 48, borderRadius: 15, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
+  playBtnWrap:  { borderRadius: 26, overflow: 'hidden', shadowColor: P.teal, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 8 },
+  playBtn:      { width: 76, height: 76, justifyContent: 'center', alignItems: 'center' },
+  savedBadge:   { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', marginTop: 16 },
+  savedText:    { fontSize: 12, color: P.success, fontWeight: '600' },
+
+  tipCard:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: 'rgba(124,62,237,0.08)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: P.purpleSoft + '30' },
+  tipText:   { flex: 1, fontSize: 13, color: P.muted, lineHeight: 20, fontStyle: 'italic' },
 });
 
 export default MeditationDetailScreen;

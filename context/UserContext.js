@@ -1,92 +1,146 @@
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import React, { createContext, useState } from 'react';
-import { db } from '../firebase/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
+import React, { createContext, useCallback, useEffect, useState } from 'react';
+import { auth } from '../firebase/firebaseConfig';
+import {
+  getUserData,
+  getUserProgressStats,
+  logMeditationSession,
+  updateUserData as updateUserDataInFirestore,
+} from '../firebase/firebaseUtils';
 
 export const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
-  const [userData, setUserData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [userData, setUserData]     = useState(null);
+  const [loading, setLoading]       = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
-  // Fetch user data from Firestore
-  const fetchUserData = async (userId) => {
-    try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        setUserData(userDoc.data());
+  // ── Auto-load user data when auth state changes ───────────
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        await fetchUserData(user.uid);
+      } else {
+        setUserData(null);
+        setLoading(false);
       }
-      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // ── Fetch user data from Firestore ────────────────────────
+  const fetchUserData = useCallback(async (userId) => {
+    try {
+      setLoading(true);
+      const data = await getUserData(userId);
+      if (data) setUserData(data);
     } catch (error) {
       console.error('Error fetching user data:', error);
+    } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Update user data
-  const updateUserData = async (userId, updates) => {
+  // ── Refresh stats after a session is logged ───────────────
+  // Call this from any screen after completing a session
+  const refreshUserData = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
     try {
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, updates);
-      setUserData((prev) => ({ ...prev, ...updates }));
+      setStatsLoading(true);
+      const data = await getUserData(uid);
+      if (data) setUserData(data);
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  // ── Update specific fields on user profile ─────────────────
+  const updateUserData = useCallback(async (userId, updates) => {
+    try {
+      await updateUserDataInFirestore(userId, updates);
+      // Update local state immediately for responsiveness
+      setUserData((prev) => prev ? { ...prev, ...updates } : updates);
     } catch (error) {
       console.error('Error updating user data:', error);
     }
-  };
+  }, []);
 
-  // Create user profile on signup
-  const createUserProfile = async (userId, email, displayName) => {
+  // ── Log a meditation session + auto-refresh stats ─────────
+  // This replaces addMeditationSession and properly updates
+  // streak, totalMinutes, sessionsCompleted and achievements
+  const addMeditationSession = useCallback(async (userId, sessionData) => {
     try {
-      await setDoc(doc(db, 'users', userId), {
-        email,
-        displayName,
-        createdAt: new Date(),
-        totalMinutes: 0,
-        streak: 0,
-        sessionsCompleted: 0,
-        favoriteSession: null,
-        preferences: {
-          notifications: true,
-          soundEnabled: true,
-          darkMode: false,
-        },
+      // Log session via firebaseUtils (handles streak + achievements)
+      const sessionId = await logMeditationSession(userId, {
+        meditationId:    sessionData.meditationId ?? sessionData.id ?? 'unknown',
+        meditationTitle: sessionData.title ?? sessionData.meditationTitle ?? 'Meditation',
+        duration:        sessionData.duration ?? 0,
+        category:        sessionData.category ?? 'general',
       });
-      fetchUserData(userId);
-    } catch (error) {
-      console.error('Error creating user profile:', error);
-    }
-  };
 
-  // Add meditation session to progress
-  const addMeditationSession = async (userId, sessionData) => {
-    try {
-      const userRef = doc(db, 'users', userId);
-      const currentData = userData || {};
-      
-      const updatedData = {
-        totalMinutes: (currentData.totalMinutes || 0) + sessionData.duration,
-        sessionsCompleted: (currentData.sessionsCompleted || 0) + 1,
-        lastSessionDate: new Date(),
-      };
+      // Auto-refresh user stats so HomeScreen + ProgressScreen update
+      await refreshUserData();
 
-      await updateDoc(userRef, updatedData);
-      setUserData((prev) => ({ ...prev, ...updatedData }));
+      return sessionId;
     } catch (error) {
       console.error('Error adding meditation session:', error);
+      throw error;
     }
-  };
+  }, [refreshUserData]);
+
+  // ── Get full progress stats (for ProgressScreen) ──────────
+  const getProgressStats = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return null;
+    try {
+      return await getUserProgressStats(uid);
+    } catch (error) {
+      console.error('Error getting progress stats:', error);
+      return null;
+    }
+  }, []);
+
+  // ── Update local stats optimistically (instant UI update) ──
+  // Call this right after a session to update UI before Firestore responds
+  const updateStatsOptimistically = useCallback((duration) => {
+    setUserData((prev) => {
+      if (!prev) return prev;
+      const now = new Date();
+      const lastDate = prev.lastSessionDate
+        ? new Date(prev.lastSessionDate?.toDate?.() ?? prev.lastSessionDate)
+        : null;
+      const isNewDay = !lastDate ||
+        now.toDateString() !== lastDate.toDateString();
+
+      return {
+        ...prev,
+        totalMinutes:      (prev.totalMinutes || 0) + duration,
+        sessionsCompleted: (prev.sessionsCompleted || 0) + 1,
+        streak:            isNewDay ? (prev.streak || 0) + 1 : (prev.streak || 0),
+        lastSessionDate:   now,
+      };
+    });
+  }, []);
 
   return (
     <UserContext.Provider
       value={{
         userData,
         loading,
+        statsLoading,
         currentUser,
         setCurrentUser,
         fetchUserData,
+        refreshUserData,
         updateUserData,
-        createUserProfile,
         addMeditationSession,
+        getProgressStats,
+        updateStatsOptimistically,
       }}
     >
       {children}
@@ -94,7 +148,6 @@ export const UserProvider = ({ children }) => {
   );
 };
 
-// Custom hook to use UserContext
 export const useUser = () => {
   const context = React.useContext(UserContext);
   if (!context) {

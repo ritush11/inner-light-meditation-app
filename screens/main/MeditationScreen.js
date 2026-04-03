@@ -1,230 +1,289 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  ImageBackground,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
-import { borderRadius, colors, shadows, spacing } from '../../styles/theme';
+import { db } from '../../firebase/firebaseConfig';
 
-const allMeditations = [
+// ── Palette ───────────────────────────────────────────────────
+const C = {
+  bg:      '#0d1117',
+  card:    '#161b27',
+  border:  'rgba(255,255,255,0.07)',
+  white:   '#FFFFFF',
+  muted:   'rgba(255,255,255,0.5)',
+  dim:     'rgba(255,255,255,0.25)',
+  accent:  '#2DD4BF',
+};
+
+// ── Real Unsplash photos per category ────────────────────────
+// Format: https://images.unsplash.com/photo-{ID}?w=400&q=75&fit=crop
+const CAT_PHOTOS = {
+  focus:       'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&q=75&fit=crop',
+  sleep:       'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=75&fit=crop',
+  mindfulness: 'https://images.unsplash.com/photo-1499728603263-13726abce5fd?w=400&q=75&fit=crop',
+  morning:     'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=400&q=75&fit=crop',
+  anxiety:     'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=400&q=75&fit=crop',
+  stress:      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=75&fit=crop',
+  breathing:   'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=400&q=75&fit=crop',
+  relaxation:  'https://images.unsplash.com/photo-1439853949212-36a7ee5c01d9?w=400&q=75&fit=crop',
+  evening:     'https://images.unsplash.com/photo-1472220638119-45f5a02b5879?w=400&q=75&fit=crop',
+  sounds:      'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400&q=75&fit=crop',
+  emotional:   'https://images.unsplash.com/photo-1474552226712-ac0f0961a954?w=400&q=75&fit=crop',
+  general:     'https://images.unsplash.com/photo-1508672019048-805c876b67e2?w=400&q=75&fit=crop',
+};
+
+// ── Soundscape photos ─────────────────────────────────────────
+const SOUNDSCAPES = [
   {
-    id: 1,
-    title: 'Morning Meditation',
-    subtitle: 'Clarity & Focus',
-    duration: 10,
-    category: 'Morning',
-    icon: 'sunny',
-    gradient: ['#1A826B', '#2BB092'],
-    level: 'Beginner',
-  },
-  {
-    id: 2,
-    title: 'Anxiety Relief',
-    subtitle: 'Calm Your Mind',
-    duration: 12,
-    category: 'Stress',
-    icon: 'heart',
-    gradient: ['#264653', '#2A9D8F'],
-    level: 'All Levels',
-  },
-  {
-    id: 3,
-    title: 'Focus Session',
-    subtitle: 'Productivity Boost',
-    duration: 15,
-    category: 'Focus',
-    icon: 'bulb',
-    gradient: ['#2A9D8F', '#21867A'],
-    level: 'Beginner',
-  },
-  {
-    id: 4,
-    title: 'Body Scan',
-    subtitle: 'Deep Relaxation',
-    duration: 20,
-    category: 'Relaxation',
-    icon: 'body',
-    gradient: ['#2BB092', '#82D1C1'],
-    level: 'Intermediate',
-  },
-  {
-    id: 5,
-    title: 'Sleep Preparation',
-    subtitle: 'Restful Sleep',
-    duration: 25,
-    category: 'Sleep',
-    icon: 'moon',
-    gradient: ['#1D3557', '#457B9D'],
-    level: 'All Levels',
-  },
-  {
-    id: 6,
-    title: 'Loving Kindness',
-    subtitle: 'Build Compassion',
-    duration: 15,
-    category: 'Emotional',
-    icon: 'heart',
-    gradient: ['#457B9D', '#1D3557'],
-    level: 'Intermediate',
-  },
-  {
-    id: 7,
-    title: 'Nature Soundscape',
-    subtitle: 'Forest Immersion',
+    id: 'sc_rain',
+    title: 'Rainfall',
+    description: 'Gentle rain on leaves',
     duration: 30,
-    category: 'Sounds',
-    icon: 'leaf',
-    gradient: ['#116A55', '#2BB092'],
-    level: 'Beginner',
+    category: 'sounds',
+    type: 'soundscape',
+    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/13/audio_257112ce94.mp3',
+    photo: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=400&q=75&fit=crop',
   },
   {
-    id: 8,
-    title: 'Evening Reflection',
-    subtitle: 'Daily Gratitude',
-    duration: 10,
-    category: 'Evening',
-    icon: 'moon',
-    gradient: ['#E76F51', '#F4A261'],
-    level: 'Beginner',
+    id: 'sc_birds',
+    title: 'Birds Chirping',
+    description: 'Morning forest birdsong',
+    duration: 20,
+    category: 'sounds',
+    type: 'soundscape',
+    audioUrl: 'https://cdn.pixabay.com/download/audio/2021/09/06/audio_6b8a1a702a.mp3',
+    photo: 'https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&q=75&fit=crop',
+  },
+  {
+    id: 'sc_jungle',
+    title: 'Jungle',
+    description: 'Tropical forest ambience',
+    duration: 45,
+    category: 'sounds',
+    type: 'soundscape',
+    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+    photo: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=75&fit=crop',
+  },
+  {
+    id: 'sc_ocean',
+    title: 'Ocean Waves',
+    description: 'Calm shore at dusk',
+    duration: 30,
+    category: 'sounds',
+    type: 'soundscape',
+    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bbd.mp3',
+    photo: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=400&q=75&fit=crop',
+  },
+  {
+    id: 'sc_fire',
+    title: 'Fireplace',
+    description: 'Warm crackling fire',
+    duration: 60,
+    category: 'sounds',
+    type: 'soundscape',
+    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3',
+    photo: 'https://images.unsplash.com/photo-1515283850704-f3dc3ccbbf93?w=400&q=75&fit=crop',
   },
 ];
 
-const categories = ['All', 'Morning', 'Focus', 'Stress', 'Sleep', 'Emotional'];
+const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+const fallbackPhoto = CAT_PHOTOS.general;
 
-const MeditationScreen = ({ navigation }) => {
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const filteredMeditations = allMeditations.filter((m) => {
-    const matchesCategory = selectedCategory === 'All' || m.category === selectedCategory;
-    const matchesSearch = m.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  const MeditationCard = ({ meditation }) => (
-    <TouchableOpacity
-      style={styles.meditationCardWrapper}
-      onPress={() =>
-        navigation.navigate('MeditationDetail', { meditation })
-      }
-      activeOpacity={0.85}
-    >
-      <LinearGradient
-        colors={meditation.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.meditationCard}
-      >
-        <View style={styles.cardBlur} />
-
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleSection}>
-              <Text style={styles.cardTitle}>{meditation.title}</Text>
-              <Text style={styles.cardSubtitle}>{meditation.subtitle}</Text>
-            </View>
-            <View style={styles.cardIcon}>
-              <Ionicons name={meditation.icon} size={28} color={colors.white} />
-            </View>
-          </View>
-
-          <View style={styles.cardFooter}>
-            <View style={styles.cardMeta}>
-              <View style={styles.metaItem}>
-                <Ionicons name="time" size={14} color={colors.white} />
-                <Text style={styles.metaText}>{meditation.duration}m</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Ionicons name="person" size={14} color={colors.white} />
-                <Text style={styles.metaText}>{meditation.level}</Text>
-              </View>
-            </View>
-            <View style={styles.playIcon}>
-              <Ionicons name="play" size={18} color={meditation.gradient[0]} />
-            </View>
-          </View>
-        </View>
-      </LinearGradient>
+// ── Category Card — photo background ─────────────────────────
+const CategoryCard = ({ cat, count, onPress }) => {
+  const key   = cat.toLowerCase();
+  const photo = CAT_PHOTOS[key] ?? fallbackPhoto;
+  return (
+    <TouchableOpacity style={styles.catCard} onPress={onPress} activeOpacity={0.88}>
+      <ImageBackground source={{ uri: photo }} style={StyleSheet.absoluteFillObject} resizeMode="cover">
+        {/* Dark gradient overlay for text readability */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.72)']}
+          start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </ImageBackground>
+      <View style={styles.catTextWrap}>
+        <Text style={styles.catName}>{cat}</Text>
+        <Text style={styles.catCount}>{count} sessions</Text>
+      </View>
     </TouchableOpacity>
   );
+};
+
+// ── Soundscape Card — photo background ───────────────────────
+const SoundscapeCard = ({ sc, onPress }) => (
+  <TouchableOpacity style={styles.scCard} onPress={() => onPress(sc)} activeOpacity={0.88}>
+    <ImageBackground source={{ uri: sc.photo }} style={StyleSheet.absoluteFillObject} resizeMode="cover">
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.75)']}
+        start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+    </ImageBackground>
+    <View style={styles.scBottom}>
+      <Text style={styles.scTitle}>{sc.title}</Text>
+      <View style={styles.scMeta}>
+        <Ionicons name="time-outline" size={11} color={C.muted} />
+        <Text style={styles.scMetaText}>{sc.duration} min</Text>
+      </View>
+    </View>
+  </TouchableOpacity>
+);
+
+// ── Search Result Row — photo thumbnail ──────────────────────
+const SearchRow = ({ meditation, onPress }) => {
+  const key    = meditation.category?.toLowerCase() ?? 'general';
+  const photo  = CAT_PHOTOS[key] ?? fallbackPhoto;
+  const guided = !(meditation.type ?? '').toLowerCase().includes('un');
+  return (
+    <TouchableOpacity style={styles.searchRow} onPress={() => onPress(meditation)} activeOpacity={0.88}>
+      <View style={styles.searchThumb}>
+        <ImageBackground source={{ uri: photo }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        <View style={styles.levelBadge}>
+          <Text style={styles.levelText}>{cap(meditation.difficulty ?? meditation.level ?? 'Beginner')}</Text>
+        </View>
+      </View>
+      <View style={styles.searchInfo}>
+        <Text style={styles.searchTitle} numberOfLines={2}>{meditation.title}</Text>
+        <View style={styles.searchMeta}>
+          <Ionicons name={guided ? 'mic-outline' : 'volume-medium-outline'} size={12} color={C.muted} />
+          <Text style={styles.searchMetaText}>{guided ? 'Guided' : 'Un-guided'}</Text>
+          <Ionicons name="time-outline" size={12} color={C.muted} style={{ marginLeft: 8 }} />
+          <Text style={styles.searchMetaText}>{meditation.duration} min</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ── Main Screen ───────────────────────────────────────────────
+const MeditationScreen = ({ navigation, route }) => {
+  const [allMeditations, setAllMeditations] = useState([]);
+  const [categories, setCategories]         = useState([]);
+  const [catCounts, setCatCounts]           = useState({});
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [loading, setLoading]               = useState(true);
+
+  useEffect(() => {
+    if (route?.params?.filterCategory) setSearchQuery(route.params.filterCategory);
+    const load = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'meditations'));
+        const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+        setAllMeditations(data);
+        const counts = {};
+        data.forEach(m => {
+          const c = cap(m.category ?? 'General');
+          counts[c] = (counts[c] ?? 0) + 1;
+        });
+        setCatCounts(counts);
+        setCategories(Object.keys(counts).sort());
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const goToDetail = (m) => navigation.navigate('MeditationDetail', { meditation: m });
+
+  const searchResults = searchQuery.length > 1
+    ? allMeditations.filter(m =>
+        (m.title ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.category ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
+
+  const isSearching = searchQuery.length > 1;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>Meditation Library</Text>
-          <Text style={styles.subtitle}>Find your perfect session</Text>
-        </View>
+    <SafeAreaView style={styles.root}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        <View style={styles.searchBarContainer}>
-          <Ionicons name="search" size={20} color={colors.lightGray} />
+        {/* Header */}
+        <Text style={styles.header}>Meditate</Text>
+
+        {/* Search */}
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={18} color={C.muted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search meditations..."
-            placeholderTextColor={colors.lightGray}
+            placeholder="What do you want to listen?"
+            placeholderTextColor={C.dim}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-          {searchQuery.length > 0 && (
+          {isSearching ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color={colors.lightGray} />
+              <Ionicons name="close-circle" size={18} color={C.muted} />
             </TouchableOpacity>
+          ) : (
+            <Ionicons name="options-outline" size={18} color={C.muted} />
           )}
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoryScroll}
-          contentContainerStyle={styles.categoryContent}
-        >
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category && styles.categoryButtonActive,
-              ]}
-              onPress={() => setSelectedCategory(category)}
-            >
-              <Text
-                style={[
-                  styles.categoryText,
-                  selectedCategory === category && styles.categoryTextActive,
-                ]}
-              >
-                {category}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Text style={styles.resultsCount}>
-          {filteredMeditations.length} {filteredMeditations.length === 1 ? 'session' : 'sessions'}
-        </Text>
-
-        <View style={styles.gridContainer}>
-          {filteredMeditations.map((meditation) => (
-            <MeditationCard key={meditation.id} meditation={meditation} />
-          ))}
-        </View>
-
-        {filteredMeditations.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="search" size={48} color={colors.lightGray} />
-            <Text style={styles.emptyStateText}>No meditations found</Text>
-            <Text style={styles.emptyStateDesc}>Try adjusting your filters</Text>
+        {loading ? (
+          <View style={styles.loader}>
+            <ActivityIndicator color={C.accent} />
           </View>
+        ) : isSearching ? (
+
+          /* ── Search Results ── */
+          <View>
+            <Text style={styles.resultCount}>{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</Text>
+            {searchResults.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="search-outline" size={36} color={C.dim} />
+                <Text style={styles.emptyText}>No sessions found</Text>
+              </View>
+            ) : (
+              searchResults.map(m => (
+                <SearchRow key={m.firestoreId ?? m.id} meditation={m} onPress={goToDetail} />
+              ))
+            )}
+          </View>
+
+        ) : (
+          <>
+            {/* ── Natural Soundscapes ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Natural Soundscapes</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scRow}>
+                {SOUNDSCAPES.map(sc => (
+                  <SoundscapeCard key={sc.id} sc={sc} onPress={goToDetail} />
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* ── Browse All ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Browse all</Text>
+              <View style={styles.catGrid}>
+                {categories.map(cat => (
+                  <CategoryCard
+                    key={cat}
+                    cat={cat}
+                    count={catCounts[cat] ?? 0}
+                    onPress={() => setSearchQuery(cat)}
+                  />
+                ))}
+              </View>
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -232,175 +291,60 @@ const MeditationScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
+  root:   { flex: 1, backgroundColor: C.bg },
+  scroll: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40 },
+
+  header: { fontSize: 26, fontWeight: '700', color: C.white, marginBottom: 16 },
+
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: C.card, borderRadius: 14,
+    paddingHorizontal: 14, height: 48,
+    marginBottom: 28, borderWidth: 1, borderColor: C.border,
   },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  searchInput: { flex: 1, fontSize: 15, color: C.white },
+
+  loader:      { paddingVertical: 60, alignItems: 'center' },
+  resultCount: { fontSize: 13, color: C.muted, marginBottom: 14 },
+  emptyBox:    { alignItems: 'center', gap: 10, paddingVertical: 40 },
+  emptyText:   { fontSize: 15, color: C.muted },
+
+  section:      { marginBottom: 32 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: C.white, marginBottom: 16 },
+
+  // Soundscape cards
+  scRow:    { gap: 12, paddingRight: 4 },
+  scCard:   { width: 140, height: 170, borderRadius: 16, overflow: 'hidden', justifyContent: 'flex-end' },
+  scBottom: { padding: 12 },
+  scTitle:  { fontSize: 14, fontWeight: '600', color: C.white, marginBottom: 4 },
+  scMeta:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  scMetaText:{ fontSize: 11, color: C.muted },
+
+  // Category grid — 2 columns
+  catGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  catCard:    { width: '48.5%', height: 100, borderRadius: 14, overflow: 'hidden', justifyContent: 'flex-end' },
+  catTextWrap:{ padding: 10 },
+  catName:    { fontSize: 14, fontWeight: '600', color: C.white, marginBottom: 2 },
+  catCount:   { fontSize: 11, color: C.muted },
+
+  // Search rows
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.card, borderRadius: 14,
+    marginBottom: 10, overflow: 'hidden',
+    borderWidth: 1, borderColor: C.border,
   },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.xl,
+  searchThumb:  { width: 96, height: 96, overflow: 'hidden' },
+  levelBadge:   {
+    position: 'absolute', top: 8, left: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
   },
-  header: {
-    marginBottom: spacing.lg,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  searchBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.lg,
-    height: 50,
-    ...shadows.light,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: spacing.md,
-    fontSize: 14,
-    color: colors.text,
-  },
-  categoryScroll: {
-    marginBottom: spacing.lg,
-  },
-  categoryContent: {
-    paddingRight: spacing.lg,
-    gap: spacing.md,
-  },
-  categoryButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.white,
-    ...shadows.light,
-  },
-  categoryButtonActive: {
-    backgroundColor: colors.primary,
-  },
-  categoryText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  categoryTextActive: {
-    color: colors.white,
-  },
-  resultsCount: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
-    fontWeight: '500',
-  },
-  gridContainer: {
-    gap: spacing.md,
-  },
-  meditationCardWrapper: {
-    marginBottom: spacing.md,
-  },
-  meditationCard: {
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    ...shadows.medium,
-    minHeight: 140,
-  },
-  cardBlur: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  cardContent: {
-    flex: 1,
-    padding: spacing.lg,
-    justifyContent: 'space-between',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  cardTitleSection: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-    marginBottom: spacing.xs,
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  cardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: borderRadius.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  cardMeta: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  metaText: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-  },
-  playIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xxl,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: spacing.md,
-  },
-  emptyStateDesc: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: spacing.sm,
-  },
+  levelText:     { fontSize: 9, color: C.white, fontWeight: '700' },
+  searchInfo:    { flex: 1, paddingHorizontal: 14, paddingVertical: 12 },
+  searchTitle:   { fontSize: 15, fontWeight: '600', color: C.white, marginBottom: 8, lineHeight: 20 },
+  searchMeta:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  searchMetaText:{ fontSize: 12, color: C.muted },
 });
 
 export default MeditationScreen;

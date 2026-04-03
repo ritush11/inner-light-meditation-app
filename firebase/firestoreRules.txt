@@ -1,0 +1,159 @@
+// ============================================================
+// INNER LIGHT — FIRESTORE SECURITY RULES
+// ============================================================
+// HOW TO APPLY THESE RULES:
+//   1. Go to Firebase Console → Firestore → Rules tab
+//   2. Replace all existing rules with the content below
+//   3. Click "Publish"
+// ============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Helper: check if user is authenticated ----
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ---- Helper: check if user owns the document ----
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // ---- Helper: check if incoming data has uid matching auth ----
+    function isValidOwner() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    // ============================================================
+    // USERS COLLECTION
+    // Users can only read and write their own profile document.
+    // ============================================================
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && isOwner(userId);
+      allow delete: if false; // Never allow profile deletion via client
+    }
+
+    // ============================================================
+    // MEDITATIONS COLLECTION
+    // All authenticated users can read meditations (public content).
+    // Only admin can write (managed via Firebase Console or Cloud Functions).
+    // ============================================================
+    match /meditations/{meditationId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Admin only — use Firebase Console
+    }
+
+    // ============================================================
+    // SLEEP STORIES COLLECTION
+    // All authenticated users can read sleep stories.
+    // ============================================================
+    match /sleepStories/{storyId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Admin only
+    }
+
+    // ============================================================
+    // QUOTES COLLECTION
+    // All authenticated users can read quotes.
+    // ============================================================
+    match /quotes/{quoteId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Admin only
+    }
+
+    // ============================================================
+    // SESSIONS COLLECTION
+    // Users can only read and write their own session logs.
+    // ============================================================
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if false; // Sessions are immutable once logged
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // MOODS COLLECTION
+    // Users can only read, write, and delete their own mood entries.
+    // ============================================================
+    match /moods/{moodId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // ============================================================
+    // JOURNALS COLLECTION
+    // Users can only access their own journal entries.
+    // ============================================================
+    match /journals/{entryId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // ============================================================
+    // QUIZ RESULTS COLLECTION
+    // Users can only access their own quiz results.
+    // ============================================================
+    match /quizResults/{resultId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if false; // Quiz results are immutable
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // GOALS COLLECTION
+    // Users can fully manage their own goals.
+    // ============================================================
+    match /goals/{goalId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // ============================================================
+    // ACHIEVEMENTS COLLECTION
+    // Users can only read their own achievements.
+    // Achievements are written by backend logic only (via firebaseUtils).
+    // ============================================================
+    match /achievements/{achievementId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if false; // Achievements are immutable
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // FAVORITES COLLECTION
+    // Users can manage their own favorites.
+    // Document ID format: {userId}_{meditationId}
+    // ============================================================
+    match /favorites/{favoriteId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // ============================================================
+    // SLEEP STORY VIEWS COLLECTION
+    // Users can log and read their own sleep story view history.
+    // ============================================================
+    match /sleepStoryViews/{viewId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOwner();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+  }
+}

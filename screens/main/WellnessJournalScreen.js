@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -11,9 +12,28 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { borderRadius, colors, shadows, spacing } from '../../styles/theme';
+import { auth } from '../../firebase/firebaseConfig';
+import { deleteJournalEntry, getUserJournalEntries, saveJournalEntry } from '../../firebase/firebaseUtils';
 
-const journalPrompts = [
+const P = {
+  teal:        '#2DD4BF',
+  tealDark:    '#0F766E',
+  tealDeep:    '#134E4A',
+  navy:        '#0A1628',
+  navyMid:     '#112240',
+  navyCard:    '#162035',
+  purple:      '#7C3AED',
+  purpleSoft:  '#A78BFA',
+  amber:       '#F59E0B',
+  white:       '#FFFFFF',
+  muted:       '#94A3B8',
+  dimmed:      '#475569',
+  glass:       'rgba(255,255,255,0.05)',
+  glassBorder: 'rgba(255,255,255,0.08)',
+  error:       '#F87171',
+};
+
+const PROMPTS = [
   'What made you smile today?',
   'What are you grateful for?',
   'How did meditation help you today?',
@@ -24,394 +44,267 @@ const journalPrompts = [
   'Who did you appreciate today?',
 ];
 
+const fmtDate = (ts) => {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const diff = Math.floor((new Date() - d) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 const WellnessJournalScreen = ({ navigation }) => {
   const [selectedPrompt, setSelectedPrompt] = useState(null);
-  const [journalEntry, setJournalEntry] = useState('');
-  const [savedEntries, setSavedEntries] = useState([
-    {
-      id: 1,
-      date: 'Today',
-      prompt: 'What made you smile today?',
-      entry: 'My meditation session this morning brought me peace and clarity.',
-      mood: '😊',
-    },
-    {
-      id: 2,
-      date: 'Yesterday',
-      prompt: 'What are you grateful for?',
-      entry: 'Grateful for health, family, and the opportunity to grow.',
-      mood: '😌',
-    },
-  ]);
+  const [entry, setEntry]                   = useState('');
+  const [entries, setEntries]               = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [saving, setSaving]                 = useState(false);
+  const [deletingId, setDeletingId]         = useState(null);
 
-  const handleSaveEntry = () => {
-    if (!selectedPrompt || !journalEntry.trim()) {
-      Alert.alert('Incomplete', 'Please select a prompt and write your thoughts');
+  useEffect(() => {
+    loadEntries();
+  }, []);
+
+  const loadEntries = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setLoading(false); return; }
+    try { setEntries(await getUserJournalEntries(uid)); }
+    catch {}
+    finally { setLoading(false); }
+  };
+
+  const handleSave = async () => {
+    if (!selectedPrompt || !entry.trim()) {
+      Alert.alert('Incomplete', 'Please select a prompt and write your thoughts.');
       return;
     }
+    const uid = auth.currentUser?.uid;
+    if (!uid) { Alert.alert('Error', 'You must be logged in.'); return; }
+    setSaving(true);
+    try {
+      await saveJournalEntry(uid, { title: selectedPrompt, prompt: selectedPrompt, entry: entry.trim(), mood: null, tags: [] });
+      Alert.alert('Saved! 📝', 'Your journal entry has been saved.');
+      setSelectedPrompt(null);
+      setEntry('');
+      await loadEntries();
+    } catch { Alert.alert('Error', 'Failed to save. Please try again.'); }
+    finally { setSaving(false); }
+  };
 
-    const newEntry = {
-      id: savedEntries.length + 1,
-      date: 'Today',
-      prompt: selectedPrompt,
-      entry: journalEntry,
-      mood: '😊',
-    };
-
-    setSavedEntries([newEntry, ...savedEntries]);
-    Alert.alert('Entry Saved!', 'Your journal entry has been saved 📝');
-    setSelectedPrompt(null);
-    setJournalEntry('');
+  const handleDelete = (id) => {
+    Alert.alert('Delete Entry', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        setDeletingId(id);
+        try { await deleteJournalEntry(id); setEntries(prev => prev.filter(e => e.id !== id)); }
+        catch { Alert.alert('Error', 'Failed to delete.'); }
+        finally { setDeletingId(null); }
+      }},
+    ]);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+    <SafeAreaView style={styles.root}>
+      <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
+      <View style={styles.glow} />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={28} color={colors.primary} />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={22} color={P.white} />
           </TouchableOpacity>
-          <Text style={styles.title}>Wellness Journal</Text>
-          <View style={{ width: 28 }} />
+          <View>
+            <Text style={styles.headerLabel}>REFLECT</Text>
+            <Text style={styles.headerTitle}>Wellness Journal</Text>
+          </View>
+          <View style={styles.entriesBadge}>
+            <Text style={styles.entriesBadgeText}>{entries.length}</Text>
+          </View>
         </View>
 
-        {/* Write Entry Section */}
-        <LinearGradient
-          colors={['#8B7FD9', '#A89FE0']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.writeSection}
-        >
-          <View style={styles.writeSectionHeader}>
-            <Ionicons name="pencil" size={24} color={colors.white} />
-            <Text style={styles.writeSectionTitle}>Write Your Entry</Text>
+        {/* Banner */}
+        <LinearGradient colors={[P.purpleSoft, P.purple]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.banner}>
+          <View style={styles.bannerRing} />
+          <View style={styles.bannerLeft}>
+            <Text style={styles.bannerTitle}>Today's Reflection</Text>
+            <Text style={styles.bannerSub}>Write, reflect, and grow every day</Text>
           </View>
-          <Text style={styles.writeSectionSubtitle}>
-            Reflect on your day and express your feelings
-          </Text>
+          <View style={styles.bannerIcon}>
+            <Ionicons name="pencil-outline" size={26} color={P.white} />
+          </View>
         </LinearGradient>
 
         {/* Prompts */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Writing Prompts</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.promptsScroll}
-          >
-            {journalPrompts.map((prompt, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.promptCard,
-                  selectedPrompt === prompt && styles.promptCardActive,
-                ]}
-                onPress={() => setSelectedPrompt(prompt)}
-              >
-                <Text
-                  style={[
-                    styles.promptText,
-                    selectedPrompt === prompt && styles.promptTextActive,
-                  ]}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.promptsRow}>
+            {PROMPTS.map((p, i) => {
+              const active = selectedPrompt === p;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setSelectedPrompt(p)}
+                  activeOpacity={0.8}
+                  style={styles.promptWrap}
                 >
-                  {prompt}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  {active ? (
+                    <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.promptCard}>
+                      <Text style={styles.promptTextActive}>{p}</Text>
+                    </LinearGradient>
+                  ) : (
+                    <View style={styles.promptCardInactive}>
+                      <Text style={styles.promptText}>{p}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
-        {/* Journal Input */}
+        {/* Selected Prompt + Input */}
         <View style={styles.section}>
           {selectedPrompt && (
-            <View style={styles.selectedPromptCard}>
-              <Ionicons name="chatbox" size={18} color={colors.primary} />
-              <Text style={styles.selectedPromptText}>{selectedPrompt}</Text>
+            <View style={styles.selectedPrompt}>
+              <Ionicons name="chatbubble-outline" size={16} color={P.teal} />
+              <Text style={styles.selectedPromptText} numberOfLines={2}>{selectedPrompt}</Text>
             </View>
           )}
 
-          <TextInput
-            style={styles.journalInput}
-            placeholder="Write your thoughts here..."
-            placeholderTextColor={colors.lightGray}
-            multiline
-            numberOfLines={8}
-            value={journalEntry}
-            onChangeText={setJournalEntry}
-            textAlignVertical="top"
-          />
-
-          <View style={styles.inputInfo}>
-            <Ionicons name="information-circle" size={16} color={colors.primary} />
-            <Text style={styles.inputInfoText}>
-              {journalEntry.length} characters
-            </Text>
+          <View style={styles.inputBox}>
+            <TextInput
+              style={styles.input}
+              placeholder={selectedPrompt ? 'Write your thoughts here...' : 'Select a prompt above or write freely...'}
+              placeholderTextColor={P.dimmed}
+              multiline
+              numberOfLines={8}
+              value={entry}
+              onChangeText={setEntry}
+              textAlignVertical="top"
+            />
           </View>
+
+          <Text style={styles.charCount}>{entry.length} characters</Text>
         </View>
 
         {/* Save Button */}
-        <LinearGradient
-          colors={['#4ECDC4', '#45B7AA']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.saveButton}
-        >
-          <TouchableOpacity
-            style={styles.saveButtonContent}
-            onPress={handleSaveEntry}
-          >
-            <Ionicons name="save" size={20} color={colors.white} />
-            <Text style={styles.saveButtonText}>Save Entry</Text>
-          </TouchableOpacity>
-        </LinearGradient>
+        <TouchableOpacity onPress={handleSave} disabled={saving} activeOpacity={0.88} style={styles.saveBtnWrap}>
+          <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.saveBtn}>
+            {saving ? <ActivityIndicator color={P.white} /> : (
+              <>
+                <Ionicons name="save-outline" size={20} color={P.white} />
+                <Text style={styles.saveBtnText}>Save Entry</Text>
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
 
-        {/* Past Entries */}
+        {/* Entries */}
         <View style={styles.section}>
-          <View style={styles.entriesHeader}>
-            <Text style={styles.sectionTitle}>Your Entries</Text>
-            <Text style={styles.entriesCount}>{savedEntries.length}</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Your Entries</Text>
 
-          {savedEntries.map((entry) => (
-            <TouchableOpacity key={entry.id} style={styles.entryCard}>
-              <View style={styles.entryHeader}>
-                <View>
-                  <Text style={styles.entryDate}>{entry.date}</Text>
-                  <Text style={styles.entryPrompt}>{entry.prompt}</Text>
+          {loading ? (
+            <ActivityIndicator color={P.teal} style={{ marginVertical: 24 }} />
+          ) : entries.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyEmoji}>📖</Text>
+              <Text style={styles.emptyTitle}>No entries yet</Text>
+              <Text style={styles.emptyDesc}>Write your first journal entry above!</Text>
+            </View>
+          ) : (
+            entries.map(e => (
+              <View key={e.id} style={styles.entryCard}>
+                <View style={styles.entryTop}>
+                  <View style={styles.entryMeta}>
+                    <Text style={styles.entryDate}>{fmtDate(e.timestamp)}</Text>
+                    <Text style={styles.entryPrompt} numberOfLines={1}>{e.prompt || e.title}</Text>
+                  </View>
+                  <Ionicons name="book-outline" size={20} color={P.purpleSoft} />
                 </View>
-                <Text style={styles.entryMood}>{entry.mood}</Text>
+
+                <Text style={styles.entryText} numberOfLines={3}>{e.entry}</Text>
+
+                <View style={styles.entryActions}>
+                  <TouchableOpacity style={styles.actionBtn}>
+                    <Ionicons name="eye-outline" size={15} color={P.teal} />
+                    <Text style={[styles.actionText, { color: P.teal }]}>View</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => handleDelete(e.id)} disabled={deletingId === e.id}>
+                    {deletingId === e.id
+                      ? <ActivityIndicator size="small" color={P.error} />
+                      : <>
+                          <Ionicons name="trash-outline" size={15} color={P.error} />
+                          <Text style={[styles.actionText, { color: P.error }]}>Delete</Text>
+                        </>
+                    }
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Text style={styles.entryText} numberOfLines={3}>
-                {entry.entry}
-              </Text>
-              <View style={styles.entryActions}>
-                <TouchableOpacity style={styles.entryAction}>
-                  <Ionicons name="eye" size={16} color={colors.primary} />
-                  <Text style={styles.entryActionText}>View</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.entryAction}>
-                  <Ionicons name="trash" size={16} color="#FF6B9D" />
-                  <Text style={[styles.entryActionText, { color: '#FF6B9D' }]}>
-                    Delete
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
+            ))
+          )}
         </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FAFBFC',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFBFC',
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  writeSection: {
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  writeSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  writeSectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  writeSectionSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  promptsScroll: {
-    marginHorizontal: -spacing.lg,
-    paddingHorizontal: spacing.lg,
-  },
-  promptCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginRight: spacing.md,
-    minWidth: 180,
-    borderWidth: 1,
-    borderColor: colors.lightBorder,
-    ...shadows.light,
-  },
-  promptCardActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  promptText: {
-    fontSize: 12,
-    color: colors.text,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  promptTextActive: {
-    color: colors.white,
-  },
-  selectedPromptCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F8F8',
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.md,
-  },
-  selectedPromptText: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '600',
-    flex: 1,
-  },
-  journalInput: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    fontSize: 14,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.lightBorder,
-    minHeight: 200,
-    ...shadows.light,
-  },
-  inputInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  inputInfoText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  saveButton: {
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  saveButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  entriesHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  entriesCount: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
-    backgroundColor: '#F0F8F8',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-  },
-  entryCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    ...shadows.light,
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.lightBorder,
-  },
-  entryDate: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-  },
-  entryPrompt: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '700',
-    maxWidth: 200,
-  },
-  entryMood: {
-    fontSize: 24,
-  },
-  entryText: {
-    fontSize: 13,
-    color: colors.text,
-    lineHeight: 20,
-    marginBottom: spacing.md,
-  },
-  entryActions: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
-  entryAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  entryActionText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  root:   { flex: 1 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 48 },
+  glow:   { position: 'absolute', top: -60, left: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: P.purpleSoft, opacity: 0.06 },
+
+  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  iconBtn:      { width: 40, height: 40, borderRadius: 12, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
+  headerLabel:  { fontSize: 10, color: P.purpleSoft, fontWeight: '700', letterSpacing: 2, textAlign: 'center' },
+  headerTitle:  { fontSize: 18, fontWeight: '800', color: P.white, textAlign: 'center' },
+  entriesBadge: { width: 40, height: 40, borderRadius: 12, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
+  entriesBadgeText: { fontSize: 14, fontWeight: '800', color: P.purpleSoft },
+
+  banner:     { borderRadius: 22, padding: 22, marginBottom: 28, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', shadowColor: P.purple, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 8 },
+  bannerRing: { position: 'absolute', top: -30, right: 60, width: 120, height: 120, borderRadius: 60, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  bannerLeft: { flex: 1 },
+  bannerTitle:{ fontSize: 18, fontWeight: '800', color: P.white, marginBottom: 4 },
+  bannerSub:  { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
+  bannerIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+
+  section:      { marginBottom: 28 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: P.white, marginBottom: 14 },
+
+  promptsRow:         { gap: 10, paddingRight: 4 },
+  promptWrap:         { },
+  promptCard:         { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, minWidth: 170 },
+  promptCardInactive: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, minWidth: 170, backgroundColor: P.navyCard, borderWidth: 1, borderColor: P.glassBorder },
+  promptText:         { fontSize: 12, color: P.muted, fontWeight: '600', textAlign: 'center' },
+  promptTextActive:   { fontSize: 12, color: P.white, fontWeight: '700', textAlign: 'center' },
+
+  selectedPrompt:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(45,212,191,0.08)', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: P.teal + '40' },
+  selectedPromptText: { fontSize: 13, color: P.teal, fontWeight: '600', flex: 1 },
+
+  inputBox:   { backgroundColor: P.navyCard, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: P.glassBorder, marginBottom: 8 },
+  input:      { fontSize: 14, color: P.white, minHeight: 180, lineHeight: 22 },
+  charCount:  { fontSize: 11, color: P.dimmed, textAlign: 'right' },
+
+  saveBtnWrap: { borderRadius: 18, overflow: 'hidden', marginBottom: 28, shadowColor: P.teal, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8 },
+  saveBtn:     { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  saveBtnText: { fontSize: 16, fontWeight: '700', color: P.white },
+
+  emptyBox:   { backgroundColor: P.navyCard, borderRadius: 20, padding: 32, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: P.glassBorder },
+  emptyEmoji: { fontSize: 40 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: P.white },
+  emptyDesc:  { fontSize: 13, color: P.muted, textAlign: 'center' },
+
+  entryCard:    { backgroundColor: P.navyCard, borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: P.glassBorder },
+  entryTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: P.glassBorder },
+  entryMeta:    { flex: 1, marginRight: 10 },
+  entryDate:    { fontSize: 11, color: P.teal, fontWeight: '700', marginBottom: 3 },
+  entryPrompt:  { fontSize: 13, fontWeight: '700', color: P.white },
+  entryText:    { fontSize: 13, color: P.muted, lineHeight: 20, marginBottom: 12 },
+  entryActions: { flexDirection: 'row', gap: 16 },
+  actionBtn:    { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  actionText:   { fontSize: 12, fontWeight: '600' },
 });
 
 export default WellnessJournalScreen;
