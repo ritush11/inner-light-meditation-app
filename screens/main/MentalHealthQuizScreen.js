@@ -305,7 +305,7 @@ const MentalHealthQuizScreen = ({ navigation }) => {
         {/* Intro Banner */}
         <LinearGradient colors={[P.purpleSoft, P.purple]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.introBanner}>
           <View style={styles.bannerRing} />
-          <Ionicons name="brain-outline" size={36} color={P.white} />
+          <Ionicons name="fitness-outline" size={36} color={P.white} />
           <Text style={styles.bannerTitle}>Self-Reflection Quizzes</Text>
           <Text style={styles.bannerSub}>Understand your mental health and get personalised recommendations</Text>
         </LinearGradient>

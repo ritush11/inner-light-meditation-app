@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -10,9 +11,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useUser } from '../../context/UserContext';
+
 import { auth } from '../../firebase/firebaseConfig';
-import { getRecentSessions, getUserAchievements } from '../../firebase/firebaseUtils';
+import { getRecentSessions, getUserAchievements, getUserData } from '../../firebase/firebaseUtils';
 
 const P = {
   teal:        '#2DD4BF',
@@ -51,21 +52,32 @@ const buildChart = (sessions) => {
 };
 
 const ProgressScreen = () => {
-  const { userData } = useUser();
+  const [userData, setUserData]         = useState(null);
   const [achievements, setAchievements] = useState([]);
   const [weekSessions, setWeekSessions] = useState([]);
   const [chartData, setChartData]       = useState([]);
   const [loading, setLoading]           = useState(true);
   const [timeframe, setTimeframe]       = useState('week');
 
-  useEffect(() => {
+  // useFocusEffect: reloads every time the Progress tab is opened
+  useFocusEffect(useCallback(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) { setLoading(false); return; }
-    Promise.all([getUserAchievements(uid), getRecentSessions(uid, 7)])
-      .then(([a, s]) => { setAchievements(a); setWeekSessions(s); setChartData(buildChart(s)); })
+    setLoading(true);
+    Promise.all([
+      getUserData(uid),
+      getUserAchievements(uid),
+      getRecentSessions(uid, 7),
+    ])
+      .then(([user, a, s]) => {
+        setUserData(user);
+        setAchievements(a);
+        setWeekSessions(s);
+        setChartData(buildChart(s));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, []));
 
   const totalWeekMin = weekSessions.reduce((s, x) => s + (x.duration || 0), 0);
   const avgMin       = weekSessions.length > 0 ? Math.round(totalWeekMin / 7) : 0;
