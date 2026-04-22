@@ -1,17 +1,3 @@
-// ============================================================
-// INNER LIGHT — FIRESTORE SEED SCRIPT
-// ============================================================
-// HOW TO RUN:
-//   1. Make sure you have Node.js installed
-//   2. In your project root, run:
-//        node scripts/runSeed.js
-//   3. Wait for "✅ Seeding complete!" message
-//   4. Check Firebase Console to verify data
-//
-// ⚠️  Only run this ONCE. Running again will add duplicates.
-//     To re-seed: delete collections first in Firebase Console.
-// ============================================================
-
 const { initializeApp } = require('firebase/app');
 const { getFirestore, collection, addDoc } = require('firebase/firestore');
 const { initializeApp: initAdmin } = require('firebase-admin/app');

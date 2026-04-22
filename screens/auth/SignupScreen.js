@@ -16,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 import { auth, db } from '../../firebase/firebaseConfig';
 
 const P = {
@@ -39,22 +38,21 @@ const P = {
   warning:     '#F59E0B',
 };
 
-// ── Password strength rules ───────────────────────────────────
 const PASSWORD_RULES = [
-  { id: 'length',   label: 'At least 8 characters',           test: (p) => p.length >= 8 },
-  { id: 'upper',    label: 'One uppercase letter (A-Z)',       test: (p) => /[A-Z]/.test(p) },
-  { id: 'lower',    label: 'One lowercase letter (a-z)',       test: (p) => /[a-z]/.test(p) },
-  { id: 'number',   label: 'One number (0-9)',                 test: (p) => /[0-9]/.test(p) },
-  { id: 'special',  label: 'One special character (!@#$...)',  test: (p) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p) },
+  { id: 'length',  label: 'At least 8 characters',          test: (p) => p.length >= 8 },
+  { id: 'upper',   label: 'One uppercase letter (A-Z)',      test: (p) => /[A-Z]/.test(p) },
+  { id: 'lower',   label: 'One lowercase letter (a-z)',      test: (p) => /[a-z]/.test(p) },
+  { id: 'number',  label: 'One number (0-9)',                test: (p) => /[0-9]/.test(p) },
+  { id: 'special', label: 'One special character (!@#$...)', test: (p) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p) },
 ];
 
-const getStrength = (password) => {
-  const passed = PASSWORD_RULES.filter(r => r.test(password)).length;
-  if (passed <= 1) return { label: 'Weak',   color: P.error,   width: '20%' };
-  if (passed === 2) return { label: 'Fair',   color: P.warning, width: '40%' };
-  if (passed === 3) return { label: 'Good',   color: P.warning, width: '60%' };
-  if (passed === 4) return { label: 'Strong', color: P.teal,    width: '80%' };
-  return { label: 'Very Strong', color: P.success, width: '100%' };
+const getStrength = (p) => {
+  const passed = PASSWORD_RULES.filter(r => r.test(p)).length;
+  if (passed <= 1) return { label: 'Weak',        color: P.error,   width: '20%' };
+  if (passed === 2) return { label: 'Fair',        color: P.warning, width: '40%' };
+  if (passed === 3) return { label: 'Good',        color: P.warning, width: '60%' };
+  if (passed === 4) return { label: 'Strong',      color: P.teal,    width: '80%' };
+  return              { label: 'Very Strong', color: P.success, width: '100%' };
 };
 
 const SignupScreen = ({ navigation }) => {
@@ -65,33 +63,40 @@ const SignupScreen = ({ navigation }) => {
   const [loading, setLoading]                 = useState(false);
   const [showPass, setShowPass]               = useState(false);
   const [showConfirm, setShowConfirm]         = useState(false);
-  const [focused, setFocused]                 = useState(null);
-  const [errors, setErrors]                   = useState({});
-  const [showRules, setShowRules]             = useState(false);
 
-  const strength = password.length > 0 ? getStrength(password) : null;
-  const allRulesPassed = PASSWORD_RULES.every(r => r.test(password));
+  // Per-field errors
+  const [nameError, setNameError]       = useState('');
+  const [emailError, setEmailError]     = useState('');
+  const [passError, setPassError]       = useState('');
+  const [confirmError, setConfirmError] = useState('');
 
-  const validate = () => {
-    const e = {};
-    if (!displayName.trim())     e.displayName = 'Name is required';
-    if (!email)                  e.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Invalid email address';
-    if (!password)               e.password = 'Password is required';
-    else if (!allRulesPassed)    e.password = 'Password does not meet requirements';
-    if (!confirmPassword)        e.confirmPassword = 'Please confirm your password';
-    else if (password !== confirmPassword) e.confirmPassword = 'Passwords do not match';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+  // Focus state per field
+  const [nameFocused, setNameFocused]         = useState(false);
+  const [emailFocused, setEmailFocused]       = useState(false);
+  const [passFocused, setPassFocused]         = useState(false);
+  const [confirmFocused, setConfirmFocused]   = useState(false);
+
+  const strength         = password.length > 0 ? getStrength(password) : null;
+  const allRulesPassed   = PASSWORD_RULES.every(r => r.test(password));
 
   const showAlert = (title, msg, onOk) => {
-    if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${msg}`);
-      onOk?.();
-    } else {
-      Alert.alert(title, msg, [{ text: 'OK', onPress: onOk }]);
-    }
+    if (Platform.OS === 'web') { window.alert(`${title}\n\n${msg}`); onOk?.(); }
+    else Alert.alert(title, msg, [{ text: 'OK', onPress: onOk }]);
+  };
+
+  const validate = () => {
+    let valid = true;
+    if (!displayName.trim())      { setNameError('Name is required'); valid = false; } else setNameError('');
+    if (!email)                   { setEmailError('Email is required'); valid = false; }
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Invalid email address'); valid = false; }
+    else setEmailError('');
+    if (!password)                { setPassError('Password is required'); valid = false; }
+    else if (!allRulesPassed)     { setPassError('Password does not meet all requirements'); valid = false; }
+    else setPassError('');
+    if (!confirmPassword)         { setConfirmError('Please confirm your password'); valid = false; }
+    else if (password !== confirmPassword) { setConfirmError('Passwords do not match'); valid = false; }
+    else setConfirmError('');
+    return valid;
   };
 
   const handleSignup = async () => {
@@ -100,34 +105,21 @@ const SignupScreen = ({ navigation }) => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const user = cred.user;
-
       await updateProfile(user, { displayName: displayName.trim() });
       await sendEmailVerification(user);
-
       await setDoc(doc(db, 'users', user.uid), {
-        uid:               user.uid,
-        email,
-        displayName:       displayName.trim(),
-        photoURL:          null,
-        bio:               '',
-        createdAt:         new Date(),
-        totalMinutes:      0,
-        streak:            0,
-        longestStreak:     0,
-        sessionsCompleted: 0,
-        lastSessionDate:   null,
-        notificationsEnabled: true,
-        reminderTime:      '08:00',
-        emailVerified:     false,
+        uid: user.uid, email, displayName: displayName.trim(),
+        photoURL: null, bio: '', createdAt: new Date(),
+        totalMinutes: 0, streak: 0, longestStreak: 0,
+        sessionsCompleted: 0, lastSessionDate: null,
+        notificationsEnabled: true, reminderTime: '08:00', emailVerified: false,
       });
-
       showAlert(
         '📧 Verify Your Email',
-        `A verification link has been sent to:\n${email}\n\nPlease check your inbox and verify your email before signing in.`,
+        `A verification link has been sent to:\n${email}\n\nPlease verify before signing in.`,
         () => navigation.navigate('Login')
       );
     } catch (err) {
-      console.error('Signup error:', err.code, err.message);
       let msg = err.message;
       if (err.code === 'auth/email-already-in-use') msg = 'This email is already registered.';
       if (err.code === 'auth/invalid-email')        msg = 'Please enter a valid email address.';
@@ -138,53 +130,23 @@ const SignupScreen = ({ navigation }) => {
     }
   };
 
-  const valueMap  = { displayName, email, password, confirmPassword };
-  const setterMap = { displayName: setDisplayName, email: setEmail, password: setPassword, confirmPassword: setConfirmPassword };
-
-  const Field = ({ fieldKey, icon, placeholder, secure, keyboard, isConfirm }) => {
-    const isFocused = focused === fieldKey;
-    const hasError  = !!errors[fieldKey];
-    const isVisible = isConfirm ? showConfirm : showPass;
-    return (
-      <View style={styles.fieldWrap}>
-        <View style={[styles.field, isFocused && styles.fieldFocus, hasError && styles.fieldError]}>
-          <Ionicons name={icon} size={18} color={isFocused ? P.teal : P.muted} style={{ marginRight: 12 }} />
-          <TextInput
-            style={styles.fieldInput}
-            placeholder={placeholder}
-            placeholderTextColor={P.dimmed}
-            value={valueMap[fieldKey]}
-            onChangeText={t => {
-              setterMap[fieldKey](t);
-              if (errors[fieldKey]) setErrors(prev => ({ ...prev, [fieldKey]: '' }));
-              if (fieldKey === 'password') setShowRules(true);
-            }}
-            secureTextEntry={!!secure && !isVisible}
-            keyboardType={keyboard || 'default'}
-            autoCapitalize={fieldKey === 'displayName' ? 'words' : 'none'}
-            onFocus={() => setFocused(fieldKey)}
-            onBlur={() => setFocused(null)}
-          />
-          {secure && (
-            <TouchableOpacity onPress={() => isConfirm ? setShowConfirm(v => !v) : setShowPass(v => !v)}>
-              <Ionicons name={isVisible ? 'eye-off-outline' : 'eye-outline'} size={18} color={P.muted} />
-            </TouchableOpacity>
-          )}
-        </View>
-        {hasError && <Text style={styles.errText}>{errors[fieldKey]}</Text>}
-      </View>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.root}>
       <LinearGradient colors={[P.tealDeep, P.navyMid, P.navy]} style={StyleSheet.absoluteFillObject} />
       <View style={styles.glowTeal} />
       <View style={styles.glowPurple} />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
+        >
           {/* Back */}
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <View style={styles.backCircle}>
@@ -201,79 +163,141 @@ const SignupScreen = ({ navigation }) => {
             <Text style={styles.subtitle}>Create your Inner Light account</Text>
           </View>
 
-          {/* Card */}
+          {/* Form Card */}
           <View style={styles.card}>
-            <LinearGradient colors={[P.teal, P.purple, 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cardBorder} />
-            <View style={styles.cardInner}>
-              <Text style={styles.cardLabel}>YOUR DETAILS</Text>
+            <Text style={styles.cardLabel}>YOUR DETAILS</Text>
 
-              <View style={styles.fields}>
-                <Field fieldKey="displayName"    icon="person-outline"           placeholder="Full name" />
-                <Field fieldKey="email"          icon="mail-outline"             placeholder="Email address" keyboard="email-address" />
-                <Field fieldKey="password"       icon="lock-closed-outline"      placeholder="Create password" secure />
-                <Field fieldKey="confirmPassword" icon="shield-checkmark-outline" placeholder="Confirm password" secure isConfirm />
+            {/* Display Name */}
+            <View style={styles.fieldWrap}>
+              <View style={[styles.field, nameFocused && styles.fieldFocus, nameError && styles.fieldError]}>
+                <Ionicons name="person-outline" size={18} color={nameFocused ? P.teal : P.muted} style={styles.icon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Full name"
+                  placeholderTextColor={P.dimmed}
+                  value={displayName}
+                  onChangeText={(t) => { setDisplayName(t); setNameError(''); }}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  onFocus={() => setNameFocused(true)}
+                  onBlur={() => setNameFocused(false)}
+                  returnKeyType="next"
+                />
               </View>
-
-              {/* Password strength */}
-              {password.length > 0 && strength && (
-                <View style={styles.strengthBox}>
-                  <View style={styles.strengthHeader}>
-                    <Text style={styles.strengthLabel}>Password Strength</Text>
-                    <Text style={[styles.strengthValue, { color: strength.color }]}>{strength.label}</Text>
-                  </View>
-                  <View style={styles.strengthTrack}>
-                    <View style={[styles.strengthFill, { width: strength.width, backgroundColor: strength.color }]} />
-                  </View>
-
-                  {/* Rules checklist */}
-                  <View style={styles.rulesList}>
-                    {PASSWORD_RULES.map(rule => {
-                      const passed = rule.test(password);
-                      return (
-                        <View key={rule.id} style={styles.ruleRow}>
-                          <Ionicons
-                            name={passed ? 'checkmark-circle' : 'ellipse-outline'}
-                            size={14}
-                            color={passed ? P.success : P.dimmed}
-                          />
-                          <Text style={[styles.ruleText, passed && { color: P.success }]}>
-                            {rule.label}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* Email verification note */}
-              <View style={styles.verifyNote}>
-                <Ionicons name="mail-outline" size={14} color={P.teal} />
-                <Text style={styles.verifyNoteText}>
-                  A verification email will be sent to your inbox after signup.
-                </Text>
-              </View>
-
-              {/* Terms */}
-              <Text style={styles.terms}>
-                By signing up you agree to our{' '}
-                <Text style={styles.termsLink}>Terms</Text>
-                {' '}and{' '}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
-              </Text>
-
-              {/* CTA */}
-              <TouchableOpacity onPress={handleSignup} disabled={loading} activeOpacity={0.88} style={styles.btnWrap}>
-                <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.btn}>
-                  {loading ? <ActivityIndicator color={P.white} /> : (
-                    <View style={styles.btnInner}>
-                      <Text style={styles.btnText}>Create Account</Text>
-                      <Ionicons name="arrow-forward" size={18} color={P.white} />
-                    </View>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
+              {nameError ? <Text style={styles.errText}>{nameError}</Text> : null}
             </View>
+
+            {/* Email */}
+            <View style={styles.fieldWrap}>
+              <View style={[styles.field, emailFocused && styles.fieldFocus, emailError && styles.fieldError]}>
+                <Ionicons name="mail-outline" size={18} color={emailFocused ? P.teal : P.muted} style={styles.icon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Email address"
+                  placeholderTextColor={P.dimmed}
+                  value={email}
+                  onChangeText={(t) => { setEmail(t); setEmailError(''); }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  returnKeyType="next"
+                />
+              </View>
+              {emailError ? <Text style={styles.errText}>{emailError}</Text> : null}
+            </View>
+
+            {/* Password */}
+            <View style={styles.fieldWrap}>
+              <View style={[styles.field, passFocused && styles.fieldFocus, passError && styles.fieldError]}>
+                <Ionicons name="lock-closed-outline" size={18} color={passFocused ? P.teal : P.muted} style={styles.icon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Create password"
+                  placeholderTextColor={P.dimmed}
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); setPassError(''); }}
+                  secureTextEntry={!showPass}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setPassFocused(true)}
+                  onBlur={() => setPassFocused(false)}
+                  returnKeyType="next"
+                />
+                <TouchableOpacity onPress={() => setShowPass(v => !v)}>
+                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={P.muted} />
+                </TouchableOpacity>
+              </View>
+              {passError ? <Text style={styles.errText}>{passError}</Text> : null}
+            </View>
+
+            {/* Confirm Password */}
+            <View style={styles.fieldWrap}>
+              <View style={[styles.field, confirmFocused && styles.fieldFocus, confirmError && styles.fieldError]}>
+                <Ionicons name="shield-checkmark-outline" size={18} color={confirmFocused ? P.teal : P.muted} style={styles.icon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Confirm password"
+                  placeholderTextColor={P.dimmed}
+                  value={confirmPassword}
+                  onChangeText={(t) => { setConfirmPassword(t); setConfirmError(''); }}
+                  secureTextEntry={!showConfirm}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setConfirmFocused(true)}
+                  onBlur={() => setConfirmFocused(false)}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSignup}
+                />
+                <TouchableOpacity onPress={() => setShowConfirm(v => !v)}>
+                  <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={18} color={P.muted} />
+                </TouchableOpacity>
+              </View>
+              {confirmError ? <Text style={styles.errText}>{confirmError}</Text> : null}
+            </View>
+
+            {/* Password strength */}
+            {password.length > 0 && strength && (
+              <View style={styles.strengthBox}>
+                <View style={styles.strengthHeader}>
+                  <Text style={styles.strengthLabel}>Password Strength</Text>
+                  <Text style={[styles.strengthVal, { color: strength.color }]}>{strength.label}</Text>
+                </View>
+                <View style={styles.strengthTrack}>
+                  <View style={[styles.strengthFill, { width: strength.width, backgroundColor: strength.color }]} />
+                </View>
+                <View style={styles.rules}>
+                  {PASSWORD_RULES.map(rule => {
+                    const passed = rule.test(password);
+                    return (
+                      <View key={rule.id} style={styles.ruleRow}>
+                        <Ionicons name={passed ? 'checkmark-circle' : 'ellipse-outline'} size={13} color={passed ? P.success : P.dimmed} />
+                        <Text style={[styles.ruleText, passed && { color: P.success }]}>{rule.label}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Verify note */}
+            <View style={styles.verifyNote}>
+              <Ionicons name="mail-outline" size={14} color={P.teal} />
+              <Text style={styles.verifyNoteText}>A verification email will be sent after signup.</Text>
+            </View>
+
+            {/* CTA */}
+            <TouchableOpacity onPress={handleSignup} disabled={loading} activeOpacity={0.88} style={styles.btnWrap}>
+              <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.btn}>
+                {loading ? <ActivityIndicator color={P.white} /> : (
+                  <View style={styles.btnInner}>
+                    <Text style={styles.btnText}>Create Account</Text>
+                    <Ionicons name="arrow-forward" size={18} color={P.white} />
+                  </View>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
 
           {/* Features */}
@@ -314,44 +338,38 @@ const styles = StyleSheet.create({
   backCircle: { width: 40, height: 40, borderRadius: 12, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
 
   header:    { alignItems: 'center', marginBottom: 28 },
-  logoRing:  { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 14, shadowColor: P.teal, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8 },
+  logoRing:  { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
   title:     { fontSize: 24, fontWeight: '800', color: P.white, letterSpacing: -0.5, marginBottom: 4 },
   subtitle:  { fontSize: 14, color: P.muted },
 
-  card:      { borderRadius: 24, marginBottom: 24, padding: 1.5, shadowColor: P.teal, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 8 },
-  cardBorder:{ ...StyleSheet.absoluteFillObject, borderRadius: 24 },
-  cardInner: { backgroundColor: P.navyLight, borderRadius: 23, padding: 24 },
+  card:      { backgroundColor: P.navyLight, borderRadius: 24, padding: 22, marginBottom: 24, borderWidth: 1, borderColor: P.glassBorder },
   cardLabel: { fontSize: 11, fontWeight: '700', color: P.muted, letterSpacing: 1.5, marginBottom: 18 },
 
-  fields:    { gap: 12, marginBottom: 16 },
-  fieldWrap: { gap: 4 },
-  field:     { flexDirection: 'row', alignItems: 'center', backgroundColor: P.glass, borderRadius: 14, borderWidth: 1, borderColor: P.glassBorder, paddingHorizontal: 16, height: 52 },
-  fieldFocus:{ borderColor: P.teal, backgroundColor: 'rgba(45,212,191,0.06)' },
-  fieldError:{ borderColor: P.error },
-  fieldInput:{ flex: 1, fontSize: 15, color: P.white },
-  errText:   { fontSize: 12, color: P.error, marginLeft: 4 },
+  fieldWrap:  { marginBottom: 12 },
+  field:      { flexDirection: 'row', alignItems: 'center', backgroundColor: P.glass, borderRadius: 14, borderWidth: 1, borderColor: P.glassBorder, paddingHorizontal: 16, height: 52 },
+  fieldFocus: { borderColor: P.teal, backgroundColor: 'rgba(45,212,191,0.06)' },
+  fieldError: { borderColor: P.error },
+  icon:       { marginRight: 12 },
+  fieldInput: { flex: 1, fontSize: 15, color: P.white },
+  errText:    { fontSize: 12, color: P.error, marginTop: 3, marginLeft: 4 },
 
-  // Strength
-  strengthBox:    { backgroundColor: 'rgba(45,212,191,0.06)', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(45,212,191,0.15)' },
+  strengthBox:    { backgroundColor: 'rgba(45,212,191,0.06)', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(45,212,191,0.15)', marginTop: 2 },
   strengthHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   strengthLabel:  { fontSize: 12, color: P.muted, fontWeight: '600' },
-  strengthValue:  { fontSize: 12, fontWeight: '700' },
+  strengthVal:    { fontSize: 12, fontWeight: '700' },
   strengthTrack:  { height: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden', marginBottom: 12 },
   strengthFill:   { height: '100%', borderRadius: 4 },
-  rulesList:      { gap: 6 },
-  ruleRow:        { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rules:          { gap: 5 },
+  ruleRow:        { flexDirection: 'row', alignItems: 'center', gap: 7 },
   ruleText:       { fontSize: 12, color: P.dimmed },
 
-  verifyNote:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(45,212,191,0.08)', borderRadius: 10, padding: 10, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(45,212,191,0.2)' },
-  verifyNoteText: { fontSize: 12, color: P.teal, flex: 1, lineHeight: 17 },
+  verifyNote:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(45,212,191,0.08)', borderRadius: 10, padding: 10, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(45,212,191,0.2)' },
+  verifyNoteText: { fontSize: 12, color: P.teal, flex: 1 },
 
-  terms:     { fontSize: 12, color: P.muted, textAlign: 'center', lineHeight: 18, marginBottom: 20 },
-  termsLink: { color: P.teal, fontWeight: '600' },
-
-  btnWrap:  { borderRadius: 16, overflow: 'hidden', shadowColor: P.teal, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 8 },
-  btn:      { height: 54, alignItems: 'center', justifyContent: 'center' },
+  btnWrap:  { borderRadius: 16, overflow: 'hidden' },
+  btn:      { height: 52, alignItems: 'center', justifyContent: 'center' },
   btnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  btnText:  { fontSize: 16, fontWeight: '700', color: P.white, letterSpacing: 0.3 },
+  btnText:  { fontSize: 16, fontWeight: '700', color: P.white },
 
   featRow:   { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: P.glass, borderRadius: 20, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: P.glassBorder },
   featItem:  { alignItems: 'center', gap: 6 },

@@ -49,16 +49,16 @@ const CAT_PHOTOS = {
 
 // ── Fallback audio per category ───────────────────────────────
 const FALLBACK_AUDIO = {
-  sleep:       'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bbd.mp3',
-  focus:       'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
-  breathing:   'https://cdn.pixabay.com/download/audio/2021/11/01/audio_cb756dd941.mp3',
-  morning:     'https://cdn.pixabay.com/download/audio/2022/10/25/audio_946ef970a0.mp3',
-  anxiety:     'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3',
-  stress:      'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3',
-  mindfulness: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
-  relaxation:  'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
-  sounds:      'https://cdn.pixabay.com/download/audio/2022/05/13/audio_257112ce94.mp3',
-  general:     'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+  sleep:       'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+  focus:       'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+  breathing:   'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+  morning:     'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+  anxiety:     'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+  stress:      'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+  mindfulness: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+  relaxation:  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+  sounds:      'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+  general:     'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
 };
 
 // ── Free guided meditation videos (YouTube embeds won't work in RN,

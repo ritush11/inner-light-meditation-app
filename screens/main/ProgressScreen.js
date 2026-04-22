@@ -34,6 +34,20 @@ const P = {
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// Fixed list of 10 possible badges — always shown, earned or locked
+const ALL_ACHIEVEMENTS = [
+  { id: 'first_session',  title: 'First Step',            icon: '🌱', desc: 'Complete your first session' },
+  { id: 'sessions_5',     title: 'Getting Started',        icon: '⭐', desc: 'Complete 5 sessions' },
+  { id: 'sessions_10',    title: 'Dedicated Meditator',    icon: '🏅', desc: 'Complete 10 sessions' },
+  { id: 'sessions_25',    title: 'Mindfulness Enthusiast', icon: '🌟', desc: 'Complete 25 sessions' },
+  { id: 'sessions_50',    title: 'Inner Light Master',     icon: '🏆', desc: 'Complete 50 sessions' },
+  { id: 'streak_3',       title: '3-Day Streak',           icon: '🔥', desc: 'Meditate 3 days in a row' },
+  { id: 'streak_7',       title: 'Week Warrior',           icon: '💪', desc: 'Meditate 7 days in a row' },
+  { id: 'streak_30',      title: 'Monthly Master',         icon: '👑', desc: 'Meditate 30 days in a row' },
+  { id: 'minutes_60',     title: '1 Hour of Peace',        icon: '🕐', desc: 'Accumulate 60 minutes' },
+  { id: 'minutes_300',    title: '5 Hours of Calm',        icon: '🧘', desc: 'Accumulate 300 minutes' },
+];
+
 const buildChart = (sessions) => {
   const today = new Date();
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -71,7 +85,14 @@ const ProgressScreen = () => {
     ])
       .then(([user, a, s]) => {
         setUserData(user);
-        setAchievements(a);
+        // Deduplicate: keep only one doc per achievementId (take the first occurrence)
+        const seen = new Set();
+        const unique = a.filter(doc => {
+          if (seen.has(doc.achievementId)) return false;
+          seen.add(doc.achievementId);
+          return true;
+        });
+        setAchievements(unique);
         setWeekSessions(s);
         setChartData(buildChart(s));
       })
@@ -198,12 +219,18 @@ const ProgressScreen = () => {
             </View>
           ) : (
             <View style={styles.achieveGrid}>
-              {achievements.map(a => (
-                <View key={a.id} style={styles.achieveCard}>
-                  <Text style={styles.achieveEmoji}>{a.icon}</Text>
-                  <Text style={styles.achieveTitle} numberOfLines={2}>{a.title}</Text>
-                </View>
-              ))}
+              {ALL_ACHIEVEMENTS.map(badge => {
+                const earned = achievements.find(a => a.achievementId === badge.id);
+                return (
+                  <View key={badge.id} style={[styles.achieveCard, !earned && styles.achieveCardLocked]}>
+                    <Text style={[styles.achieveEmoji, !earned && { opacity: 0.35 }]}>{badge.icon}</Text>
+                    <Text style={[styles.achieveTitle, !earned && styles.achieveTitleLocked]} numberOfLines={2}>
+                      {badge.title}
+                    </Text>
+                    {!earned && <Text style={styles.achieveLocked}>Locked</Text>}
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -284,9 +311,12 @@ const styles = StyleSheet.create({
   emptyDesc:  { fontSize: 13, color: P.muted, textAlign: 'center' },
 
   achieveGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  achieveCard: { width: '31%', backgroundColor: P.navyCard, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: P.glassBorder, gap: 6 },
-  achieveEmoji:{ fontSize: 28 },
-  achieveTitle:{ fontSize: 11, color: P.muted, textAlign: 'center', fontWeight: '600' },
+  achieveCard:       { width: '31%', backgroundColor: P.navyCard, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: P.glassBorder, gap: 6 },
+  achieveCardLocked: { opacity: 0.5 },
+  achieveEmoji:      { fontSize: 28 },
+  achieveTitle:      { fontSize: 11, color: P.white, textAlign: 'center', fontWeight: '600' },
+  achieveTitleLocked:{ color: P.dimmed },
+  achieveLocked:     { fontSize: 9, color: P.dimmed, fontWeight: '600', letterSpacing: 0.5 },
 
   tipsCard:  { backgroundColor: P.navyCard, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: P.glassBorder },
   tipRow:    { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },

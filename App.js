@@ -42,7 +42,6 @@ import WellnessJournalScreen from './screens/main/WellnessJournalScreen';
 import { UserProvider } from './context/UserContext';
 
 // Icons + Theme
-import { colors } from './styles/theme';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -195,17 +194,22 @@ function MainTabNavigator() {
           else if (route.name === 'Profile')  iconName = focused ? 'person'      : 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor:   colors.primary,
-        tabBarInactiveTintColor: colors.lightGray,
+        tabBarActiveTintColor:   '#2DD4BF',
+        tabBarInactiveTintColor: '#475569',
         tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.lightBorder,
+          backgroundColor: '#0A1628',
+          borderTopColor: '#112240',
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
-          height: 60,
+          height: 64,
+          elevation: 20,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 12,
         },
-        tabBarLabelStyle: { fontSize: 12, marginTop: 4 },
+        tabBarLabelStyle: { fontSize: 11, marginTop: 2, fontWeight: '600' },
       })}
     >
       <Tab.Screen name="Home"     component={HomeScreen}        options={{ tabBarLabel: 'Home' }} />

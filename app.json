@@ -5,13 +5,20 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTabletMode": true,
       "bundleIdentifier": "com.innerlight.app"
     },
     "android": {
       "package": "com.innerlight.app"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4f1670dd-45a3-4bbd-ad17-596d001cff33"
+      }
     }
   }
 }

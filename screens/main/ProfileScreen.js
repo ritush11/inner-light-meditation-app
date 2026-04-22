@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
-
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +19,10 @@ import {
 } from 'react-native';
 import { auth } from '../../firebase/firebaseConfig';
 import { getUserData, updateUserData } from '../../firebase/firebaseUtils';
+import {
+  cancelAllReminders,
+  scheduleDailyReminder,
+} from '../../firebase/notificationUtils';
 
 const P = {
   teal:        '#2DD4BF',
@@ -57,6 +60,7 @@ const ProfileScreen = () => {
   const [userStats, setUserStats] = useState({ sessionsCompleted: 0, totalMinutes: 0, streak: 0 });
   const [notifications, setNotifications] = useState(true);
   const [soundEnabled, setSoundEnabled]   = useState(true);
+  const [reminderTime, setReminderTime]   = useState('08:00');
   const [loading, setLoading]     = useState(true);
 
   const [editVisible, setEditVisible] = useState(false);
@@ -77,6 +81,7 @@ const ProfileScreen = () => {
             setUserStats({ sessionsCompleted: d.sessionsCompleted || 0, totalMinutes: d.totalMinutes || 0, streak: d.streak || 0 });
             setNotifications(d.notificationsEnabled !== false);
             setSoundEnabled(d.soundEnabled !== false);
+            setReminderTime(d.reminderTime || '08:00');
           }
         } catch {}
       }
@@ -93,22 +98,20 @@ const ProfileScreen = () => {
     catch { setter(!value); }
   };
 
+  const REMINDER_TIMES = ['06:00', '07:00', '08:00', '09:00', '10:00', '12:00', '18:00', '20:00', '21:00', '22:00'];
+
+  const handleReminderTime = async (time) => {
+    setReminderTime(time);
+    const uid = auth.currentUser?.uid;
+    if (uid) await updateUserData(uid, { reminderTime: time }).catch(() => {});
+    if (notifications) {
+      const [hour, minute] = time.split(':').map(Number);
+      await scheduleDailyReminder(hour, minute).catch(() => {});
+    }
+  };
+
+
   const handleSaveProfile = async () => {
-    const handleSaveProfile = async () => {
-  const uid = auth.currentUser?.uid;
-  if (!uid || !editName.trim()) { Alert.alert('Error', 'Name cannot be empty.'); return; }
-  setSavingEdit(true);
-  try {
-    // Update BOTH Firestore AND Firebase Auth profile
-    await updateUserData(uid, { displayName: editName.trim(), bio: editBio.trim() });
-    await updateProfile(auth.currentUser, { displayName: editName.trim() });
-    
-    setUserName(editName.trim());
-    setUserBio(editBio.trim());
-    setEditVisible(false);
-  } catch { Alert.alert('Error', 'Failed to save. Try again.'); }
-  finally { setSavingEdit(false); }
-};
     const uid = auth.currentUser?.uid;
     if (!uid || !editName.trim()) { Alert.alert('Error', 'Name cannot be empty.'); return; }
     setSavingEdit(true);
@@ -162,14 +165,24 @@ const ProfileScreen = () => {
         </View>
 
         {/* ── Stats ── */}
-     
+        <View style={styles.statsRow}>
+          {[
+            { value: userStats.sessionsCompleted, label: 'Sessions', color: P.teal },
+            { value: userStats.totalMinutes,      label: 'Minutes',  color: P.purpleSoft },
+            { value: `${userStats.streak} 🔥`,   label: 'Streak',   color: P.amber },
+          ].map((s, i) => (
+            <View key={i} style={styles.statCard}>
+              <Text style={[styles.statVal, { color: s.color }]}>{s.value}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
 
         {/* ── Settings ── */}
         <Text style={styles.sectionTitle}>Settings</Text>
         <View style={styles.card}>
           {[
-            { icon: 'notifications-outline', label: 'Notifications', desc: 'Meditation reminders', value: notifications, key: 'notificationsEnabled', setter: setNotifications, color: P.teal },
-            { icon: 'volume-high-outline',   label: 'Sound',         desc: 'Audio during sessions', value: soundEnabled,  key: 'soundEnabled',         setter: setSoundEnabled,   color: P.purpleSoft },
+            { icon: 'volume-high-outline', label: 'Sound', desc: 'Audio during sessions', value: soundEnabled, key: 'soundEnabled', setter: setSoundEnabled, color: P.purpleSoft },
           ].map((item, i) => (
             <View key={i} style={[styles.row, i > 0 && styles.rowBorder]}>
               <View style={[styles.rowIcon, { backgroundColor: item.color + '20' }]}>
@@ -187,6 +200,60 @@ const ProfileScreen = () => {
               />
             </View>
           ))}
+        </View>
+
+        {/* ── Notifications Card ── */}
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.card}>
+
+          {/* Toggle row */}
+          <View style={styles.row}>
+            <View style={[styles.rowIcon, { backgroundColor: P.teal + '20' }]}>
+              <Ionicons name="notifications-outline" size={18} color={P.teal} />
+            </View>
+            <View style={styles.rowInfo}>
+              <Text style={styles.rowLabel}>Daily Reminder</Text>
+              <Text style={styles.rowDesc}>Get reminded to meditate each day</Text>
+            </View>
+            <Switch
+              value={notifications}
+              onValueChange={async (v) => {
+                handleToggle('notificationsEnabled', v, setNotifications);
+                if (v) {
+                  const [h, m] = reminderTime.split(':').map(Number);
+                  await scheduleDailyReminder(h, m).catch(() => {});
+                } else {
+                  await cancelAllReminders().catch(() => {});
+                }
+              }}
+              trackColor={{ false: P.dimmed, true: P.teal + '80' }}
+              thumbColor={notifications ? P.teal : P.muted}
+            />
+          </View>
+
+          {/* Reminder time picker */}
+          {notifications && (
+            <View style={[styles.notifSection, styles.rowBorder]}>
+              <View style={styles.notifTimeHeader}>
+                <Ionicons name="time-outline" size={16} color={P.muted} />
+                <Text style={styles.notifTimeLabel}>Reminder Time</Text>
+                <Text style={styles.notifTimeCurrent}>{reminderTime}</Text>
+              </View>
+              <View style={styles.timePills}>
+                {REMINDER_TIMES.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.timePill, reminderTime === t && styles.timePillActive]}
+                    onPress={() => handleReminderTime(t)}
+                  >
+                    <Text style={[styles.timePillText, reminderTime === t && styles.timePillTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+
         </View>
 
         {/* ── More Features ── */}
@@ -317,6 +384,17 @@ const styles = StyleSheet.create({
   saveWrap:    { borderRadius: 16, overflow: 'hidden', marginTop: 4 },
   saveBtn:     { height: 52, alignItems: 'center', justifyContent: 'center' },
   saveBtnText: { fontSize: 15, fontWeight: '700', color: P.white },
+
+  // Notification section
+  notifSection:    { padding: 16 },
+  notifTimeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  notifTimeLabel:  { fontSize: 13, fontWeight: '600', color: P.muted, flex: 1 },
+  notifTimeCurrent:{ fontSize: 15, fontWeight: '800', color: P.teal },
+  timePills:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timePill:        { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  timePillActive:  { backgroundColor: P.teal + '20', borderColor: P.teal },
+  timePillText:    { fontSize: 13, color: P.muted, fontWeight: '600' },
+  timePillTextActive: { color: P.teal, fontWeight: '700' },
 });
 
 export default ProfileScreen;

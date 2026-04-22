@@ -52,7 +52,7 @@ const SOUNDSCAPES = [
     duration: 30,
     category: 'sounds',
     type: 'soundscape',
-    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/13/audio_257112ce94.mp3',
+    audioUrl: 'https://res.cloudinary.com/dujtvasvr/video/upload/v1775397707/rainfall.mp3_qyagz7.mp3',
     photo: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=400&q=75&fit=crop',
   },
   {
@@ -62,7 +62,7 @@ const SOUNDSCAPES = [
     duration: 20,
     category: 'sounds',
     type: 'soundscape',
-    audioUrl: 'https://cdn.pixabay.com/download/audio/2021/09/06/audio_6b8a1a702a.mp3',
+    audioUrl: 'https://res.cloudinary.com/dujtvasvr/video/upload/v1775397738/birds.mp3_ld9ert.wav',
     photo: 'https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&q=75&fit=crop',
   },
   {
@@ -72,7 +72,7 @@ const SOUNDSCAPES = [
     duration: 45,
     category: 'sounds',
     type: 'soundscape',
-    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3',
+    audioUrl: 'https://res.cloudinary.com/dujtvasvr/video/upload/v1775397711/jungle.mp3_juvnvj.wav',
     photo: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=75&fit=crop',
   },
   {
@@ -82,7 +82,7 @@ const SOUNDSCAPES = [
     duration: 30,
     category: 'sounds',
     type: 'soundscape',
-    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bbd.mp3',
+    audioUrl: 'https://res.cloudinary.com/dujtvasvr/video/upload/v1775397722/oceanwaves.mp3_cnvgbu.wav',
     photo: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=400&q=75&fit=crop',
   },
   {
@@ -92,8 +92,8 @@ const SOUNDSCAPES = [
     duration: 60,
     category: 'sounds',
     type: 'soundscape',
-    audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3',
-    photo: 'https://images.unsplash.com/photo-1515283850704-f3dc3ccbbf93?w=400&q=75&fit=crop',
+    audioUrl: 'https://res.cloudinary.com/dujtvasvr/video/upload/v1775397706/fireplace.mp3_wc4g4u.mp3',
+    photo: 'https://images.unsplash.com/photo-iZwQbx4T8bQ?w=400&q=75&fit=crop',
   },
 ];
 

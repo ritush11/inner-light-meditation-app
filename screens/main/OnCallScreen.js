@@ -19,8 +19,8 @@ const P = {
   glassBorder: 'rgba(255,255,255,0.12)',
 };
 
-const RING_AUDIO     = 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_c518c8d49e.mp3';
-const AMBIENT_AUDIO  = 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_8892db8ca2.mp3';
+// Phone ringing tone — plays for 5 seconds then stops
+const RING_AUDIO = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3';
 
 const ActiveCallScreen = ({ navigation, route }) => {
   const { line } = route.params;
@@ -37,11 +37,15 @@ const ActiveCallScreen = ({ navigation, route }) => {
   useEffect(() => {
     startRinging();
 
-    // After 4s → connected + switch to ambient
+    // After 5s → stop ringing and show Connected
     connectRef.current = setTimeout(async () => {
+      try {
+        await soundRef.current?.stopAsync();
+        await soundRef.current?.unloadAsync();
+        soundRef.current = null;
+      } catch {}
       setStatus('Connected');
-      await switchToAmbient();
-    }, 4000);
+    }, 5000);
 
     // Start elapsed counter
     timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
@@ -69,20 +73,6 @@ const ActiveCallScreen = ({ navigation, route }) => {
       soundRef.current = sound;
     } catch (e) {
       console.log('Ringing audio error:', e.message);
-    }
-  };
-
-  const switchToAmbient = async () => {
-    try {
-      await soundRef.current?.stopAsync();
-      await soundRef.current?.unloadAsync();
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: AMBIENT_AUDIO },
-        { shouldPlay: true, isLooping: true, volume: 0.4 }
-      );
-      soundRef.current = sound;
-    } catch (e) {
-      console.log('Ambient audio error:', e.message);
     }
   };
 

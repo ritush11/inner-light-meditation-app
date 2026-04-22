@@ -50,7 +50,7 @@ const CAT_PHOTOS = {
 };
 
 // Fallback audio if Firestore story has no audioUrl
-const FALLBACK_AUDIO = 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bbd.mp3';
+const FALLBACK_AUDIO = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3';
 
 const cap  = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 const fmt  = (ms) => {

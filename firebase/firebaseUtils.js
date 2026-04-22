@@ -73,17 +73,17 @@ export const signOutUser = async () => {
 
 export const getUserData = async (userId) => {
   try {
-    console.log('🔍 Looking for user doc:', userId);
-    console.log('🔍 db instance:', db.app.name, db._databaseId?.database);
-    
+    // Primary: direct lookup by UID as doc ID
     const docRef = doc(db, 'users', userId);
-    console.log('🔍 docRef path:', docRef.path);
-    
     const docSnap = await getDoc(docRef);
-    console.log('🔍 docSnap exists:', docSnap.exists());
-    
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
+    }
+    // Fallback: query by uid field (for old accounts)
+    const q = query(collection(db, 'users'), where('uid', '==', userId));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      return { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
     }
     return null;
   } catch (error) {
@@ -548,21 +548,25 @@ export const getUserAchievements = async (userId) => {
 
 export const checkAndAwardAchievements = async (userId, stats) => {
   const milestones = [
-    { id: 'first_session',  title: 'First Step',             description: 'Completed your first meditation session!', icon: '🌱', condition: stats.sessionsCompleted >= 1  },
-    { id: 'sessions_5',     title: 'Getting Started',         description: 'Completed 5 meditation sessions.',         icon: '⭐', condition: stats.sessionsCompleted >= 5  },
-    { id: 'sessions_10',    title: 'Dedicated Meditator',     description: 'Completed 10 meditation sessions.',        icon: '🏅', condition: stats.sessionsCompleted >= 10 },
-    { id: 'sessions_25',    title: 'Mindfulness Enthusiast',  description: 'Completed 25 meditation sessions.',        icon: '🌟', condition: stats.sessionsCompleted >= 25 },
-    { id: 'sessions_50',    title: 'Inner Light Master',      description: 'Completed 50 meditation sessions!',        icon: '🏆', condition: stats.sessionsCompleted >= 50 },
-    { id: 'streak_3',       title: '3-Day Streak',            description: 'Meditated 3 days in a row.',              icon: '🔥', condition: stats.streak >= 3  },
-    { id: 'streak_7',       title: 'Week Warrior',            description: 'Meditated 7 days in a row!',              icon: '💪', condition: stats.streak >= 7  },
-    { id: 'streak_30',      title: 'Monthly Master',          description: 'Meditated 30 days in a row!',             icon: '👑', condition: stats.streak >= 30 },
-    { id: 'minutes_60',     title: '1 Hour of Peace',         description: 'Accumulated 60 total minutes.',           icon: '🕐', condition: stats.totalMinutes >= 60  },
-    { id: 'minutes_300',    title: '5 Hours of Calm',         description: 'Accumulated 300 total minutes.',          icon: '🧘', condition: stats.totalMinutes >= 300 },
+    { id: 'first_session',  title: 'First Step',            description: 'Completed your first meditation session!', icon: '🌱', condition: stats.sessionsCompleted >= 1  },
+    { id: 'sessions_5',     title: 'Getting Started',        description: 'Completed 5 meditation sessions.',         icon: '⭐', condition: stats.sessionsCompleted >= 5  },
+    { id: 'sessions_10',    title: 'Dedicated Meditator',    description: 'Completed 10 meditation sessions.',        icon: '🏅', condition: stats.sessionsCompleted >= 10 },
+    { id: 'sessions_25',    title: 'Mindfulness Enthusiast', description: 'Completed 25 meditation sessions.',        icon: '🌟', condition: stats.sessionsCompleted >= 25 },
+    { id: 'sessions_50',    title: 'Inner Light Master',     description: 'Completed 50 meditation sessions!',        icon: '🏆', condition: stats.sessionsCompleted >= 50 },
+    { id: 'streak_3',       title: '3-Day Streak',           description: 'Meditated 3 days in a row.',              icon: '🔥', condition: stats.streak >= 3  },
+    { id: 'streak_7',       title: 'Week Warrior',           description: 'Meditated 7 days in a row!',              icon: '💪', condition: stats.streak >= 7  },
+    { id: 'streak_30',      title: 'Monthly Master',         description: 'Meditated 30 days in a row!',             icon: '👑', condition: stats.streak >= 30 },
+    { id: 'minutes_60',     title: '1 Hour of Peace',        description: 'Accumulated 60 total minutes.',           icon: '🕐', condition: stats.totalMinutes >= 60  },
+    { id: 'minutes_300',    title: '5 Hours of Calm',        description: 'Accumulated 300 total minutes.',          icon: '🧘', condition: stats.totalMinutes >= 300 },
   ];
 
   try {
-    const existing = await getUserAchievements(userId);
-    const existingIds = existing.map((a) => a.achievementId);
+    // Use simple where query — NO orderBy to avoid composite index requirement
+    // orderBy was causing silent failures which made existingIds always empty
+    const q = query(collection(db, 'achievements'), where('uid', '==', userId));
+    const snap = await getDocs(q);
+    const existingIds = snap.docs.map((d) => d.data().achievementId);
+
     for (const milestone of milestones) {
       if (milestone.condition && !existingIds.includes(milestone.id)) {
         await addDoc(collection(db, 'achievements'), {
@@ -573,7 +577,8 @@ export const checkAndAwardAchievements = async (userId, stats) => {
           icon:          milestone.icon,
           awardedAt:     new Date(),
         });
-        console.log('🏆 Achievement awarded:', milestone.title);
+        // Add to local list to prevent duplicate within same call
+        existingIds.push(milestone.id);
       }
     }
   } catch (error) {

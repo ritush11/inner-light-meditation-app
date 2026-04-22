@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
+  Animated,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -33,64 +33,72 @@ const P = {
   success:     '#34D399',
 };
 
+// ── Quiz data ─────────────────────────────────────────────────
 const QUIZZES = [
-  { id: 'stress_assessment', title: 'Stress Assessment',    desc: 'Evaluate your current stress levels',      icon: 'alert-circle-outline', color: '#F87171',  questions: 5 },
-  { id: 'anxiety_checkin',   title: 'Anxiety Check-In',     desc: 'Understand your anxiety patterns',         icon: 'warning-outline',      color: '#FB923C',  questions: 5 },
-  { id: 'mood_wellness',     title: 'Mood Wellness',         desc: 'Overall emotional well-being assessment',  icon: 'happy-outline',        color: '#F59E0B',  questions: 5 },
-  { id: 'sleep_quality',     title: 'Sleep Quality',         desc: 'Evaluate your sleep patterns',             icon: 'moon-outline',         color: '#A78BFA',  questions: 5 },
+  {
+    id: 'stress_assessment', title: 'Stress Check',
+    desc: 'How are you handling life\'s pressures?',
+    icon: 'flame-outline', color: '#F87171',
+    xpReward: 50, badge: 'Stress Analyst',
+    questions: [
+      { q: 'How stressed do you feel today?',        opts: ['Totally calm', 'Mildly stressed', 'Quite stressed', 'Very overwhelmed'], hint: 'Be honest with yourself' },
+      { q: 'How often do you feel overwhelmed?',     opts: ['Rarely ever', 'Sometimes', 'Often', 'Almost always'], hint: 'Think about the past week' },
+      { q: 'How well do you manage stress?',         opts: ['Excellent', 'Pretty well', 'Struggling', 'Not coping'], hint: 'Your coping strategies matter' },
+      { q: 'How much does stress affect your day?',  opts: ['No impact', 'A little', 'Quite a bit', 'Completely'], hint: 'Consider your productivity' },
+      { q: 'How tense or anxious do you feel?',      opts: ['Not at all', 'Slightly', 'Quite tense', 'Extremely'], hint: 'Physical tension counts too' },
+    ],
+  },
+  {
+    id: 'anxiety_checkin', title: 'Anxiety Check',
+    desc: 'Understand your worry patterns',
+    icon: 'pulse-outline', color: '#FB923C',
+    xpReward: 50, badge: 'Mindful Observer',
+    questions: [
+      { q: 'How anxious do you feel right now?',              opts: ['Not at all', 'A little bit', 'Moderately', 'Very anxious'], hint: 'Right this moment' },
+      { q: 'How often do you experience racing thoughts?',    opts: ['Rarely', 'Sometimes', 'Often', 'Almost always'], hint: 'Thoughts that won\'t slow down' },
+      { q: 'Do you have trouble relaxing?',                   opts: ['Never', 'Sometimes', 'Often', 'Can\'t relax at all'], hint: 'Even in calm situations' },
+      { q: 'How often do physical symptoms occur?',          opts: ['Never', 'Occasionally', 'Frequently', 'Constantly'], hint: 'e.g. racing heart, tight chest' },
+      { q: 'Does anxiety interfere with your activities?',   opts: ['Not at all', 'Slightly', 'Moderately', 'Severely'], hint: 'Work, social life, daily tasks' },
+    ],
+  },
+  {
+    id: 'mood_wellness', title: 'Mood Check',
+    desc: 'How is your emotional well-being?',
+    icon: 'sunny-outline', color: '#F59E0B',
+    xpReward: 50, badge: 'Mood Master',
+    questions: [
+      { q: 'How would you describe your overall mood?',     opts: ['Excellent', 'Pretty good', 'Up and down', 'Low'], hint: 'Your general emotional state' },
+      { q: 'How often do you feel positive emotions?',      opts: ['Most of the time', 'Often', 'Sometimes', 'Rarely'], hint: 'Joy, gratitude, excitement' },
+      { q: 'How connected do you feel to others?',          opts: ['Very connected', 'Connected', 'A bit isolated', 'Very isolated'], hint: 'Relationships and belonging' },
+      { q: 'How motivated are you for daily activities?',   opts: ['Highly motivated', 'Motivated', 'Low motivation', 'No motivation'], hint: 'Getting things done' },
+      { q: 'How satisfied are you with life right now?',    opts: ['Very satisfied', 'Satisfied', 'Dissatisfied', 'Very dissatisfied'], hint: 'Big picture view' },
+    ],
+  },
+  {
+    id: 'sleep_quality', title: 'Sleep Check',
+    desc: 'How well are you really sleeping?',
+    icon: 'moon-outline', color: '#A78BFA',
+    xpReward: 50, badge: 'Sleep Scholar',
+    questions: [
+      { q: 'How many hours of sleep per night?',           opts: ['7–9 hours', '6–7 hours', '5–6 hours', 'Less than 5'], hint: 'Your average on weekdays' },
+      { q: 'How often do you struggle to fall asleep?',    opts: ['Never', 'Rarely', 'Sometimes', 'Most nights'], hint: 'Lying awake at night' },
+      { q: 'How refreshed do you feel after waking?',      opts: ['Very refreshed', 'Okay', 'Somewhat tired', 'Exhausted'], hint: 'First 30 minutes of the day' },
+      { q: 'How often do you wake up during the night?',   opts: ['Never', 'Rarely', 'Sometimes', 'Often'], hint: 'Interruptions to sleep' },
+      { q: 'How much does poor sleep affect your day?',    opts: ['Not at all', 'A little', 'Quite a lot', 'Significantly'], hint: 'Focus, mood, energy' },
+    ],
+  },
 ];
 
-const QUESTIONS = {
-  stress_assessment: [
-    { question: 'How stressed do you feel today?',        options: ['Not stressed', 'Mildly stressed', 'Moderately stressed', 'Very stressed'] },
-    { question: 'How often do you feel overwhelmed?',     options: ['Rarely', 'Sometimes', 'Often', 'Very often'] },
-    { question: 'How well do you manage stress?',         options: ['Excellent', 'Good', 'Fair', 'Poor'] },
-    { question: 'How much does stress impact your day?',  options: ['No impact', 'Minimal', 'Moderate', 'Significant'] },
-    { question: 'How tense or anxious do you feel?',      options: ['Not at all', 'A little', 'Quite a bit', 'Extremely'] },
-  ],
-  anxiety_checkin: [
-    { question: 'How anxious do you feel right now?',                  options: ['Not at all', 'A little', 'Moderately', 'Very anxious'] },
-    { question: 'How often do you experience worry?',                   options: ['Rarely', 'Sometimes', 'Often', 'Almost always'] },
-    { question: 'Do you have trouble relaxing?',                        options: ['Never', 'Sometimes', 'Often', 'Always'] },
-    { question: 'How often do physical symptoms of anxiety occur?',     options: ['Never', 'Occasionally', 'Frequently', 'Constantly'] },
-    { question: 'Does anxiety interfere with your daily activities?',   options: ['Not at all', 'Slightly', 'Moderately', 'Severely'] },
-  ],
-  mood_wellness: [
-    { question: 'How would you describe your overall mood today?',      options: ['Excellent', 'Good', 'Fair', 'Poor'] },
-    { question: 'How often do you feel positive emotions?',             options: ['Most of the time', 'Often', 'Sometimes', 'Rarely'] },
-    { question: 'How connected do you feel to others?',                 options: ['Very connected', 'Connected', 'Somewhat isolated', 'Very isolated'] },
-    { question: 'How motivated are you to do daily activities?',        options: ['Highly motivated', 'Motivated', 'Low motivation', 'No motivation'] },
-    { question: 'How satisfied are you with your life right now?',      options: ['Very satisfied', 'Satisfied', 'Dissatisfied', 'Very dissatisfied'] },
-  ],
-  sleep_quality: [
-    { question: 'How many hours of sleep do you get per night?',    options: ['7-9 hours', '6-7 hours', '5-6 hours', 'Less than 5'] },
-    { question: 'How often do you have trouble falling asleep?',     options: ['Never', 'Rarely', 'Sometimes', 'Often'] },
-    { question: 'How refreshed do you feel after waking up?',        options: ['Very refreshed', 'Refreshed', 'Somewhat tired', 'Very tired'] },
-    { question: 'How often do you wake up during the night?',        options: ['Never', 'Rarely', 'Sometimes', 'Often'] },
-    { question: 'How much does poor sleep affect your day?',         options: ['Not at all', 'Slightly', 'Moderately', 'Significantly'] },
-  ],
+const calcScore  = (ans) => !ans.length ? 0 : Math.round(ans.map(i => [100,75,50,25][i]).reduce((a,b)=>a+b,0)/ans.length);
+const getLabel   = (s) => s >= 80 ? 'Excellent' : s >= 60 ? 'Good' : s >= 40 ? 'Fair' : 'Needs Care';
+const getColor   = (s) => s >= 80 ? P.success : s >= 60 ? P.amber : s >= 40 ? '#FB923C' : P.error;
+const getXP      = (s) => s >= 80 ? 50 : s >= 60 ? 35 : s >= 40 ? 20 : 15;
+const getRecs    = (s) => {
+  if (s >= 80) return ['Maintain your current wellness routine', 'Try advanced meditation to deepen your practice', 'Help others by sharing your wellness journey'];
+  if (s >= 60) return ['Add a 10-minute daily meditation session', 'Practice box breathing when feeling tense', 'Keep a daily wellness journal for 7 days'];
+  if (s >= 40) return ['Start with a 5-minute guided meditation daily', 'Try the 4-7-8 breathing technique before bed', 'Consider speaking with a wellness counsellor'];
+  return ['Please speak with a mental health professional', 'Use the Support tab to access helplines', 'Begin with just 3 minutes of breathing daily'];
 };
-
-const calcScore = (answers) => {
-  if (!answers.length) return 0;
-  const pts = answers.map(i => i === 0 ? 100 : i === 1 ? 75 : i === 2 ? 50 : 25);
-  return Math.round(pts.reduce((a, b) => a + b, 0) / pts.length);
-};
-
-const getLabel = (score) => {
-  if (score >= 80) return 'Excellent';
-  if (score >= 60) return 'Good';
-  if (score >= 40) return 'Fair';
-  return 'Needs Attention';
-};
-
-const getRecs = (score) => {
-  if (score >= 80) return ['Keep up your mindfulness routine!', 'Try advanced meditation sessions', 'Share your wellness tips with others'];
-  if (score >= 60) return ['Try a 10-min daily meditation', 'Practice box breathing exercises', 'Keep a daily wellness journal'];
-  return ['Start with 5-min guided meditation', 'Try the 4-7-8 breathing technique', 'Consider speaking with a professional'];
-};
-
-const getScoreColor = (score) => score >= 80 ? P.success : score >= 60 ? P.amber : P.error;
 
 const fmtDate = (ts) => {
   if (!ts) return '';
@@ -98,15 +106,43 @@ const fmtDate = (ts) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+// ── Score ring (animated) ─────────────────────────────────────
+const ScoreRing = ({ score, color }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, { toValue: score, duration: 1200, useNativeDriver: false }).start();
+  }, [score]);
+  return (
+    <View style={st.ringWrap}>
+      <View style={[st.ringOuter, { borderColor: color + '30' }]}>
+        <View style={[st.ringInner, { borderColor: color }]}>
+          <Text style={[st.ringScore, { color }]}>{score}%</Text>
+          <Text style={[st.ringLabel, { color }]}>{getLabel(score)}</Text>
+        </View>
+      </View>
+      {/* XP burst */}
+      <View style={[st.xpBurst, { backgroundColor: color }]}>
+        <Text style={st.xpBurstText}>+{getXP(score)} XP</Text>
+      </View>
+    </View>
+  );
+};
+
+// ── Main component ────────────────────────────────────────────
 const MentalHealthQuizScreen = ({ navigation }) => {
-  const [selectedId, setSelectedId]     = useState(null);
-  const [currentQ, setCurrentQ]         = useState(0);
-  const [answers, setAnswers]           = useState([]);
-  const [quizStarted, setQuizStarted]   = useState(false);
-  const [quizDone, setQuizDone]         = useState(false);
-  const [saving, setSaving]             = useState(false);
-  const [pastResults, setPastResults]   = useState([]);
-  const [loadingHist, setLoadingHist]   = useState(true);
+  const [phase, setPhase]           = useState('home');   // home | quiz | results
+  const [selectedId, setSelectedId] = useState(null);
+  const [currentQ, setCurrentQ]     = useState(0);
+  const [answers, setAnswers]       = useState([]);
+  const [chosen, setChosen]         = useState(null);     // highlight selected before advancing
+  const [saving, setSaving]         = useState(false);
+  const [pastResults, setPastResults] = useState([]);
+  const [loadingHist, setLoadingHist] = useState(true);
+
+  // animations
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const cardAnim     = useRef(new Animated.Value(0)).current;
+  const shakeAnim    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -114,22 +150,63 @@ const MentalHealthQuizScreen = ({ navigation }) => {
     getUserQuizResults(uid).then(r => setPastResults(r)).catch(() => {}).finally(() => setLoadingHist(false));
   }, []);
 
-  const startQuiz = (id) => { setSelectedId(id); setQuizStarted(true); setCurrentQ(0); setAnswers([]); setQuizDone(false); };
-  const reset     = () => { setSelectedId(null); setQuizStarted(false); setCurrentQ(0); setAnswers([]); setQuizDone(false); };
+  const quiz = QUIZZES.find(q => q.id === selectedId);
+  const questions = quiz?.questions || [];
+  const score = calcScore(answers);
+
+  const animateCard = () => {
+    cardAnim.setValue(0);
+    Animated.spring(cardAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }).start();
+  };
+
+  const startQuiz = (id) => {
+    setSelectedId(id);
+    setCurrentQ(0);
+    setAnswers([]);
+    setChosen(null);
+    progressAnim.setValue(0);
+    setPhase('quiz');
+    animateCard();
+  };
 
   const handleAnswer = (idx) => {
-    const newAnswers = [...answers, idx];
-    setAnswers(newAnswers);
-    const qs = QUESTIONS[selectedId];
-    if (currentQ < qs.length - 1) setCurrentQ(currentQ + 1);
-    else setQuizDone(true);
+    if (chosen !== null) return;   // prevent double tap
+    setChosen(idx);
+
+    setTimeout(() => {
+      const newAnswers = [...answers, idx];
+      setAnswers(newAnswers);
+      const nextQ = currentQ + 1;
+
+      // Animate progress bar
+      Animated.timing(progressAnim, {
+        toValue: nextQ / questions.length,
+        duration: 400,
+        useNativeDriver: false,
+      }).start();
+
+      if (nextQ < questions.length) {
+        setCurrentQ(nextQ);
+        setChosen(null);
+        animateCard();
+      } else {
+        setPhase('results');
+      }
+    }, 400);
+  };
+
+  const reset = () => {
+    setPhase('home');
+    setSelectedId(null);
+    setCurrentQ(0);
+    setAnswers([]);
+    setChosen(null);
+    progressAnim.setValue(0);
   };
 
   const handleSave = async () => {
     const uid = auth.currentUser?.uid;
     if (!uid) { Alert.alert('Error', 'You must be logged in.'); return; }
-    const quiz  = QUIZZES.find(q => q.id === selectedId);
-    const score = calcScore(answers);
     setSaving(true);
     try {
       await saveQuizResult(uid, {
@@ -137,8 +214,9 @@ const MentalHealthQuizScreen = ({ navigation }) => {
         score, maxScore: 100, category: selectedId,
         resultLabel: getLabel(score), answers,
         recommendations: getRecs(score),
+        xpEarned: getXP(score),
       });
-      Alert.alert('Saved! ✅', 'Your quiz results have been saved.');
+      Alert.alert('Saved!', `You earned +${getXP(score)} XP! Keep going.`);
       const r = await getUserQuizResults(uid);
       setPastResults(r);
       reset();
@@ -146,314 +224,457 @@ const MentalHealthQuizScreen = ({ navigation }) => {
     finally { setSaving(false); }
   };
 
-  // ── Results ───────────────────────────────────────────────
-  if (quizDone && selectedId) {
-    const quiz  = QUIZZES.find(q => q.id === selectedId);
-    const score = calcScore(answers);
-    const label = getLabel(score);
-    const recs  = getRecs(score);
-    const sColor = getScoreColor(score);
-
+  // ── RESULTS SCREEN ─────────────────────────────────────────
+  if (phase === 'results' && quiz) {
+    const sColor = getColor(score);
+    const recs   = getRecs(score);
+    const xp     = getXP(score);
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={st.root}>
         <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={st.scroll}>
 
-          <TouchableOpacity style={styles.backCircle} onPress={reset}>
-            <Ionicons name="chevron-back" size={22} color={P.white} />
-          </TouchableOpacity>
-
-          {/* Results Hero */}
-          <LinearGradient colors={[quiz.color + 'CC', quiz.color + '66']} style={styles.resultsHero}>
-            <View style={styles.heroRing} />
-            <Ionicons name={quiz.icon} size={52} color={P.white} />
-            <Text style={styles.resultsBadge}>Quiz Complete!</Text>
-            <Text style={styles.resultsQuizTitle}>{quiz.title}</Text>
+          {/* Hero */}
+          <LinearGradient colors={[quiz.color + 'CC', quiz.color + '44']} style={st.resultsHero}>
+            <View style={st.heroRing} />
+            <View style={st.heroRing2} />
+            <Ionicons name={quiz.icon} size={48} color={P.white} />
+            <Text style={st.heroComplete}>Quiz Complete!</Text>
+            <Text style={st.heroTitle}>{quiz.title}</Text>
+            {/* XP badge */}
+            <View style={st.xpBadge}>
+              <Ionicons name="star" size={14} color={P.amber} />
+              <Text style={st.xpBadgeText}>+{xp} XP Earned</Text>
+            </View>
           </LinearGradient>
 
-          {/* Score circle */}
-          <View style={styles.scoreWrap}>
-            <View style={[styles.scoreCircle, { borderColor: sColor }]}>
-              <Text style={[styles.scoreVal, { color: sColor }]}>{score}%</Text>
-              <Text style={styles.scoreLabel}>{label}</Text>
-            </View>
+          {/* Score ring */}
+          <ScoreRing score={score} color={sColor} />
+
+          {/* Per-question breakdown */}
+          <View style={st.breakdownCard}>
+            <Text style={st.breakdownTitle}>Your Answers</Text>
+            {questions.map((q, i) => {
+              const pts = [100,75,50,25][answers[i]];
+              const c = pts >= 75 ? P.success : pts >= 50 ? P.amber : P.error;
+              return (
+                <View key={i} style={[st.breakRow, i > 0 && st.breakBorder]}>
+                  <View style={[st.breakDot, { backgroundColor: c }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.breakQ} numberOfLines={1}>{q.q}</Text>
+                    <Text style={[st.breakA, { color: c }]}>{q.opts[answers[i]]}</Text>
+                  </View>
+                  <Text style={[st.breakPts, { color: c }]}>{pts}pts</Text>
+                </View>
+              );
+            })}
           </View>
 
-          {/* Insight */}
-          <View style={styles.insightCard}>
-            <View style={[styles.insightIconBox, { backgroundColor: sColor + '20' }]}>
-              <Ionicons name={score >= 80 ? 'checkmark-circle-outline' : score >= 60 ? 'alert-circle-outline' : 'heart-outline'} size={22} color={sColor} />
+          {/* Badge earned */}
+          <View style={[st.badgeCard, { borderColor: quiz.color + '50' }]}>
+            <LinearGradient colors={[quiz.color + '20', 'transparent']} style={StyleSheet.absoluteFillObject} />
+            <View style={[st.badgeIconBox, { backgroundColor: quiz.color + '25' }]}>
+              <Ionicons name="ribbon" size={26} color={quiz.color} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.insightTitle}>
-                {score >= 80 ? 'Great Job! 🎉' : score >= 60 ? 'Room to Improve' : 'Take Care 💙'}
-              </Text>
-              <Text style={styles.insightText}>
-                {score >= 80
-                  ? 'You\'re managing well. Keep up your wellness routine!'
-                  : score >= 60
-                  ? 'Consider daily meditation to improve your well-being.'
-                  : 'We recommend practicing mindfulness daily.'}
-              </Text>
+              <Text style={st.badgeLabel}>BADGE EARNED</Text>
+              <Text style={[st.badgeName, { color: quiz.color }]}>{quiz.badge}</Text>
+              <Text style={st.badgeDesc}>Complete all 4 quizzes to unlock the Wellness Champion achievement</Text>
             </View>
           </View>
 
           {/* Recommendations */}
-          <Text style={styles.sectionTitle}>Recommended For You</Text>
-          <View style={styles.recsCard}>
+          <View style={st.recsCard}>
+            <Text style={st.recsTitle}>Your Action Plan</Text>
             {recs.map((r, i) => (
-              <View key={i} style={[styles.recRow, i > 0 && styles.recBorder]}>
-                <View style={[styles.recDot, { backgroundColor: quiz.color }]} />
-                <Text style={styles.recText}>{r}</Text>
+              <View key={i} style={st.recRow}>
+                <View style={[st.recNum, { backgroundColor: sColor + '20' }]}>
+                  <Text style={[st.recNumText, { color: sColor }]}>{i + 1}</Text>
+                </View>
+                <Text style={st.recText}>{r}</Text>
               </View>
             ))}
           </View>
 
-          {/* Actions */}
-          <TouchableOpacity onPress={handleSave} disabled={saving} activeOpacity={0.88} style={styles.saveBtnWrap}>
-            <LinearGradient colors={[P.teal, P.tealDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.saveBtn}>
-              {saving ? <ActivityIndicator color={P.white} /> : (
-                <>
-                  <Ionicons name="save-outline" size={20} color={P.white} />
-                  <Text style={styles.saveBtnText}>Save Results</Text>
-                </>
-              )}
+          {/* Action buttons */}
+          <TouchableOpacity onPress={handleSave} disabled={saving} activeOpacity={0.88} style={st.saveBtnWrap}>
+            <LinearGradient colors={[sColor, sColor + 'BB']} start={{ x:0,y:0 }} end={{ x:1,y:0 }} style={st.saveBtn}>
+              {saving
+                ? <Text style={st.saveBtnText}>Saving...</Text>
+                : <><Ionicons name="trophy-outline" size={18} color={P.white} /><Text style={st.saveBtnText}>Save & Earn XP</Text></>
+              }
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.outlineBtn} onPress={reset}>
-            <Text style={styles.outlineBtnText}>Back to Quizzes</Text>
+          <TouchableOpacity style={st.backBtn} onPress={reset}>
+            <Text style={st.backBtnText}>Back to Quizzes</Text>
           </TouchableOpacity>
+
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // ── Quiz in Progress ──────────────────────────────────────
-  if (quizStarted && selectedId) {
-    const quiz     = QUIZZES.find(q => q.id === selectedId);
-    const qs       = QUESTIONS[selectedId];
-    const question = qs[currentQ];
-    const progress = ((currentQ + 1) / qs.length) * 100;
+  // ── QUIZ QUESTION SCREEN ────────────────────────────────────
+  if (phase === 'quiz' && quiz) {
+    const q         = questions[currentQ];
+    const pct       = currentQ / questions.length;
+    const qNum      = currentQ + 1;
+    const totalQ    = questions.length;
 
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={st.root}>
         <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-          {/* Header */}
-          <View style={styles.quizHeader}>
-            <TouchableOpacity style={styles.closeBtn} onPress={reset}>
-              <Ionicons name="close" size={20} color={P.white} />
-            </TouchableOpacity>
-            <Text style={styles.quizHeaderTitle} numberOfLines={1}>{quiz.title}</Text>
-            <Text style={styles.quizCounter}>{currentQ + 1}/{qs.length}</Text>
-          </View>
-
-          {/* Progress */}
-          <View style={styles.progressTrack}>
-            <LinearGradient
-              colors={[quiz.color, quiz.color + '80']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={[styles.progressFill, { width: `${progress}%` }]}
-            />
-          </View>
-
-          {/* Question */}
-          <View style={styles.questionCard}>
-            <Text style={styles.questionNum}>Question {currentQ + 1}</Text>
-            <Text style={styles.questionText}>{question.question}</Text>
-          </View>
-
-          {/* Options */}
-          <View style={styles.options}>
-            {question.options.map((opt, i) => (
-              <TouchableOpacity key={i} style={styles.optionBtn} onPress={() => handleAnswer(i)} activeOpacity={0.88}>
-                <View style={[styles.optionDot, { borderColor: quiz.color }]} />
-                <Text style={styles.optionText}>{opt}</Text>
-                <Ionicons name="chevron-forward" size={16} color={P.dimmed} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Quiz List ─────────────────────────────────────────────
-  return (
-    <SafeAreaView style={styles.root}>
-      <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
-      <View style={styles.glow} />
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backCircle} onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={22} color={P.white} />
+        <View style={st.quizTopBar}>
+          {/* Back */}
+          <TouchableOpacity style={st.quizBackBtn} onPress={reset}>
+            <Ionicons name="close" size={20} color={P.muted} />
           </TouchableOpacity>
-          <View>
-            <Text style={styles.headerLabel}>SELF-CARE</Text>
-            <Text style={styles.headerTitle}>Mental Health Quiz</Text>
+
+          {/* Progress bar */}
+          <View style={st.progressWrap}>
+            <Animated.View style={[st.progressFill, {
+              width: progressAnim.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }),
+              backgroundColor: quiz.color,
+            }]} />
           </View>
-          <View style={[styles.backCircle, { backgroundColor: 'rgba(167,139,250,0.15)', borderColor: P.purpleSoft + '40' }]}>
-            <Ionicons name="help-circle-outline" size={20} color={P.purpleSoft} />
+
+          {/* Q counter */}
+          <View style={[st.qCounter, { backgroundColor: quiz.color + '20' }]}>
+            <Text style={[st.qCounterText, { color: quiz.color }]}>{qNum}/{totalQ}</Text>
           </View>
         </View>
 
-        {/* Intro Banner */}
-        <LinearGradient colors={[P.purpleSoft, P.purple]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.introBanner}>
-          <View style={styles.bannerRing} />
-          <Ionicons name="fitness-outline" size={36} color={P.white} />
-          <Text style={styles.bannerTitle}>Self-Reflection Quizzes</Text>
-          <Text style={styles.bannerSub}>Understand your mental health and get personalised recommendations</Text>
+        {/* XP strip */}
+        <View style={st.xpStrip}>
+          <Ionicons name="star" size={13} color={P.amber} />
+          <Text style={st.xpStripText}>+{quiz.xpReward} XP available</Text>
+          <View style={st.xpStripDot} />
+          <Ionicons name="ribbon-outline" size={13} color={quiz.color} />
+          <Text style={[st.xpStripText, { color: quiz.color }]}>Earn "{quiz.badge}" badge</Text>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={st.quizScroll} keyboardShouldPersistTaps="handled">
+
+          <Animated.View style={[st.qCard, {
+            opacity: cardAnim,
+            transform: [{ translateY: cardAnim.interpolate({ inputRange:[0,1], outputRange:[20,0] }) }],
+          }]}>
+            {/* Hint */}
+            <View style={st.hintRow}>
+              <Ionicons name="bulb-outline" size={13} color={P.amber} />
+              <Text style={st.hintText}>{q.hint}</Text>
+            </View>
+
+            {/* Question */}
+            <Text style={st.questionText}>{q.q}</Text>
+
+            {/* Step dots */}
+            <View style={st.stepDots}>
+              {questions.map((_, i) => (
+                <View key={i} style={[
+                  st.stepDot,
+                  i < currentQ && { backgroundColor: quiz.color },
+                  i === currentQ && { backgroundColor: quiz.color, width: 18 },
+                  i > currentQ && { backgroundColor: P.dimmed },
+                ]} />
+              ))}
+            </View>
+          </Animated.View>
+
+          {/* Answer options */}
+          <View style={st.optionsWrap}>
+            {q.opts.map((opt, i) => {
+              const isSelected = chosen === i;
+              const isPast     = chosen !== null && chosen !== i;
+              const optColor   = [P.success, P.teal, P.amber, P.error][i];
+              return (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => handleAnswer(i)}
+                  activeOpacity={0.82}
+                  disabled={chosen !== null}
+                  style={[
+                    st.option,
+                    isSelected && { borderColor: optColor, backgroundColor: optColor + '18' },
+                    isPast && { opacity: 0.35 },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={isSelected ? [optColor + '30', optColor + '10'] : ['transparent', 'transparent']}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                  {/* Color bar left */}
+                  <View style={[st.optBar, { backgroundColor: optColor }]} />
+                  {/* Radio */}
+                  <View style={[st.radio, isSelected && { backgroundColor: optColor, borderColor: optColor }]}>
+                    {isSelected && <Ionicons name="checkmark" size={13} color={P.white} />}
+                  </View>
+                  <Text style={[st.optText, isSelected && { color: P.white, fontWeight: '700' }]}>{opt}</Text>
+                  {/* Score preview */}
+                  <View style={[st.optScore, { backgroundColor: optColor + '15' }]}>
+                    <Text style={[st.optScoreText, { color: optColor }]}>{[100,75,50,25][i]}pts</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── HOME SCREEN ─────────────────────────────────────────────
+  const totalXP = pastResults.reduce((sum, r) => sum + (r.xpEarned || getXP(r.score)), 0);
+  const level   = totalXP < 50 ? 1 : totalXP < 150 ? 2 : totalXP < 300 ? 3 : 4;
+  const levelName = ['Beginner', 'Explorer', 'Practitioner', 'Mindfulness Master'][level - 1];
+  const levelColor = [P.muted, P.teal, P.purpleSoft, P.amber][level - 1];
+
+  return (
+    <SafeAreaView style={st.root}>
+      <LinearGradient colors={[P.navy, P.navyMid, P.tealDeep]} style={StyleSheet.absoluteFillObject} />
+      <View style={st.glow1} />
+      <View style={st.glow2} />
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={st.scroll}>
+
+        {/* Header */}
+        <View style={st.header}>
+          <Text style={st.headerSub}>MENTAL WELLNESS</Text>
+          <Text style={st.headerTitle}>Health Quizzes</Text>
+        </View>
+
+        {/* Level / XP card */}
+        <LinearGradient colors={[P.tealDark + 'AA', P.purple + '66']} style={st.levelCard}>
+          <View style={st.levelLeft}>
+            <View style={[st.levelBadge, { backgroundColor: levelColor + '25', borderColor: levelColor + '60' }]}>
+              <Ionicons name="shield-checkmark" size={18} color={levelColor} />
+            </View>
+            <View>
+              <Text style={st.levelTitle}>{levelName}</Text>
+              <Text style={st.levelXP}>{totalXP} XP earned</Text>
+            </View>
+          </View>
+          <View style={st.levelRight}>
+            <Text style={st.levelNum}>Lv.{level}</Text>
+            <View style={st.levelBar}>
+              <View style={[st.levelFill, { width: `${Math.min((totalXP % 150) / 1.5, 100)}%`, backgroundColor: levelColor }]} />
+            </View>
+            <Text style={st.levelNext}>Next: {150 - (totalXP % 150)} XP</Text>
+          </View>
         </LinearGradient>
 
-        {/* Quiz Cards */}
-        <Text style={styles.sectionTitle}>Choose a Quiz</Text>
-        <View style={styles.quizList}>
-          {QUIZZES.map(quiz => {
-            const last = pastResults.find(r => r.quizId === quiz.id);
+        {/* Stats row */}
+        <View style={st.statsRow}>
+          {[
+            { icon: 'clipboard-outline',  label: 'Taken',    value: pastResults.length, color: P.teal },
+            { icon: 'star-outline',       label: 'Total XP', value: totalXP,            color: P.amber },
+            { icon: 'trending-up-outline',label: 'Best',     value: pastResults.length ? Math.max(...pastResults.map(r=>r.score)) + '%' : '-', color: P.purpleSoft },
+          ].map((s, i) => (
+            <View key={i} style={st.statCard}>
+              <View style={[st.statIcon, { backgroundColor: s.color + '20' }]}>
+                <Ionicons name={s.icon} size={16} color={s.color} />
+              </View>
+              <Text style={[st.statVal, { color: s.color }]}>{s.value}</Text>
+              <Text style={st.statLbl}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Quiz cards */}
+        <Text style={st.sectionTitle}>Choose a Quiz</Text>
+        <View style={st.quizGrid}>
+          {QUIZZES.map((qz) => {
+            const best = pastResults.filter(r => r.quizId === qz.id);
+            const lastScore = best.length ? best[0].score : null;
+            const done = lastScore !== null;
             return (
-              <TouchableOpacity key={quiz.id} style={styles.quizCard} onPress={() => startQuiz(quiz.id)} activeOpacity={0.88}>
-                <LinearGradient colors={[quiz.color + '25', quiz.color + '08']} style={styles.quizCardGrad} />
-                <View style={[styles.quizIconBox, { backgroundColor: quiz.color + '20' }]}>
-                  <Ionicons name={quiz.icon} size={26} color={quiz.color} />
-                </View>
-                <View style={styles.quizInfo}>
-                  <Text style={styles.quizTitle}>{quiz.title}</Text>
-                  <Text style={styles.quizDesc}>{quiz.desc}</Text>
-                  <View style={styles.quizMeta}>
-                    <View style={styles.metaPill}>
-                      <Ionicons name="list-outline" size={12} color={P.muted} />
-                      <Text style={styles.metaText}>{quiz.questions} questions</Text>
+              <TouchableOpacity key={qz.id} onPress={() => startQuiz(qz.id)} activeOpacity={0.88} style={st.quizCard}>
+                <LinearGradient colors={[qz.color + '22', 'transparent']} style={StyleSheet.absoluteFillObject} />
+                <View style={[st.quizCardTop, { borderBottomColor: qz.color + '30' }]}>
+                  <View style={[st.quizIcon, { backgroundColor: qz.color + '25' }]}>
+                    <Ionicons name={qz.icon} size={26} color={qz.color} />
+                  </View>
+                  {done && (
+                    <View style={[st.doneBadge, { backgroundColor: getColor(lastScore) + '25', borderColor: getColor(lastScore) + '60' }]}>
+                      <Text style={[st.doneBadgeText, { color: getColor(lastScore) }]}>{lastScore}%</Text>
                     </View>
-                    {last && (
-                      <View style={[styles.metaPill, { backgroundColor: getScoreColor(last.score) + '20' }]}>
-                        <Ionicons name="checkmark-circle-outline" size={12} color={getScoreColor(last.score)} />
-                        <Text style={[styles.metaText, { color: getScoreColor(last.score) }]}>
-                          Last: {last.score}%
-                        </Text>
-                      </View>
-                    )}
+                  )}
+                </View>
+                <Text style={st.quizCardTitle}>{qz.title}</Text>
+                <Text style={st.quizCardDesc}>{qz.desc}</Text>
+                <View style={st.quizCardBottom}>
+                  <View style={st.xpPill}>
+                    <Ionicons name="star" size={10} color={P.amber} />
+                    <Text style={st.xpPillText}>+{qz.xpReward} XP</Text>
+                  </View>
+                  <View style={[st.quizCardBtn, { backgroundColor: qz.color }]}>
+                    <Text style={st.quizCardBtnText}>{done ? 'Retry' : 'Start'}</Text>
+                    <Ionicons name={done ? 'refresh-outline' : 'arrow-forward'} size={12} color={P.white} />
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={P.dimmed} />
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* Past Results */}
-        {!loadingHist && pastResults.length > 0 && (
-          <View style={styles.pastSection}>
-            <Text style={styles.sectionTitle}>Recent Results</Text>
-            <View style={styles.pastCard}>
-              {pastResults.slice(0, 3).map((r, i) => (
-                <View key={r.id} style={[styles.pastRow, i > 0 && styles.pastBorder]}>
-                  <View style={styles.pastLeft}>
-                    <Text style={styles.pastTitle} numberOfLines={1}>{r.quizTitle}</Text>
-                    <Text style={styles.pastDate}>{fmtDate(r.timestamp)}</Text>
+        {/* Past results */}
+        {pastResults.length > 0 && (
+          <View style={st.histSection}>
+            <Text style={st.sectionTitle}>Past Results</Text>
+            {pastResults.slice(0, 6).map((r, i) => {
+              const c = getColor(r.score);
+              return (
+                <View key={r.id || i} style={st.histRow}>
+                  <View style={[st.histDot, { backgroundColor: c }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.histTitle}>{r.quizTitle}</Text>
+                    <Text style={st.histDate}>{fmtDate(r.timestamp)}</Text>
                   </View>
-                  <View style={[styles.pastBadge, { backgroundColor: getScoreColor(r.score) + '20' }]}>
-                    <Text style={[styles.pastScore, { color: getScoreColor(r.score) }]}>{r.score}%</Text>
-                    <Text style={[styles.pastLabel, { color: getScoreColor(r.score) }]}>{r.resultLabel}</Text>
+                  <View style={[st.histScore, { backgroundColor: c + '20', borderColor: c + '50' }]}>
+                    <Text style={[st.histScoreText, { color: c }]}>{r.score}%</Text>
                   </View>
+                  <Text style={[st.histLabel, { color: c }]}>{r.resultLabel}</Text>
                 </View>
-              ))}
-            </View>
+              );
+            })}
           </View>
         )}
+
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   root:   { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 48 },
-  glow:   { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: P.purpleSoft, opacity: 0.07 },
+  glow1:  { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: P.teal,   opacity: 0.06 },
+  glow2:  { position: 'absolute', bottom: 60, left: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: P.purple, opacity: 0.06 },
 
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  backCircle:  { width: 40, height: 40, borderRadius: 12, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
-  headerLabel: { fontSize: 10, color: P.purpleSoft, fontWeight: '700', letterSpacing: 2, textAlign: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: P.white, textAlign: 'center' },
+  header:     { marginBottom: 20 },
+  headerSub:  { fontSize: 11, color: P.teal, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  headerTitle:{ fontSize: 28, fontWeight: '800', color: P.white, letterSpacing: -0.5 },
 
-  introBanner: { borderRadius: 22, padding: 24, alignItems: 'center', marginBottom: 28, overflow: 'hidden', shadowColor: P.purple, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 8 },
-  bannerRing:  { position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: 60, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  bannerTitle: { fontSize: 18, fontWeight: '800', color: P.white, marginTop: 12, marginBottom: 6 },
-  bannerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 20 },
+  // Level card
+  levelCard:   { borderRadius: 22, padding: 18, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: P.glassBorder },
+  levelLeft:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  levelBadge:  { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  levelTitle:  { fontSize: 16, fontWeight: '700', color: P.white },
+  levelXP:     { fontSize: 12, color: P.muted, marginTop: 2 },
+  levelRight:  { alignItems: 'flex-end', gap: 4 },
+  levelNum:    { fontSize: 22, fontWeight: '800', color: P.white },
+  levelBar:    { width: 80, height: 5, backgroundColor: P.glass, borderRadius: 3, overflow: 'hidden' },
+  levelFill:   { height: '100%', borderRadius: 3 },
+  levelNext:   { fontSize: 10, color: P.dimmed },
+
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
+  statCard: { flex: 1, backgroundColor: P.navyCard, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: P.glassBorder, gap: 6 },
+  statIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  statVal:  { fontSize: 18, fontWeight: '800' },
+  statLbl:  { fontSize: 10, color: P.muted, fontWeight: '600' },
 
   sectionTitle: { fontSize: 17, fontWeight: '800', color: P.white, marginBottom: 14 },
 
-  quizList:    { gap: 10, marginBottom: 28 },
-  quizCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: P.navyCard, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: P.glassBorder, overflow: 'hidden' },
-  quizCardGrad:{ ...StyleSheet.absoluteFillObject },
-  quizIconBox: { width: 50, height: 50, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  quizInfo:    { flex: 1 },
-  quizTitle:   { fontSize: 15, fontWeight: '700', color: P.white, marginBottom: 3 },
-  quizDesc:    { fontSize: 12, color: P.muted, marginBottom: 8 },
-  quizMeta:    { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  metaPill:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: P.glass, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: P.glassBorder },
-  metaText:    { fontSize: 11, color: P.muted, fontWeight: '600' },
+  quizGrid: { gap: 12, marginBottom: 32 },
+  quizCard: { backgroundColor: P.navyCard, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: P.glassBorder, overflow: 'hidden' },
+  quizCardTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1 },
+  quizIcon:      { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  doneBadge:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  doneBadgeText: { fontSize: 13, fontWeight: '800' },
+  quizCardTitle: { fontSize: 17, fontWeight: '800', color: P.white, marginBottom: 4 },
+  quizCardDesc:  { fontSize: 13, color: P.muted, marginBottom: 14, lineHeight: 18 },
+  quizCardBottom:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  xpPill:        { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: P.amber + '15', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  xpPillText:    { fontSize: 12, color: P.amber, fontWeight: '700' },
+  quizCardBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  quizCardBtnText:{ fontSize: 13, fontWeight: '700', color: P.white },
 
-  pastSection: { marginBottom: 28 },
-  pastCard:    { backgroundColor: P.navyCard, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: P.glassBorder },
-  pastRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 },
-  pastBorder:  { borderTopWidth: 1, borderTopColor: P.glassBorder },
-  pastLeft:    { flex: 1, marginRight: 12 },
-  pastTitle:   { fontSize: 14, fontWeight: '600', color: P.white },
-  pastDate:    { fontSize: 11, color: P.muted, marginTop: 2 },
-  pastBadge:   { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', minWidth: 80 },
-  pastScore:   { fontSize: 16, fontWeight: '800' },
-  pastLabel:   { fontSize: 10, fontWeight: '600', marginTop: 1 },
+  // Past results
+  histSection: { marginBottom: 20 },
+  histRow:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: P.navyCard, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: P.glassBorder },
+  histDot:     { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  histTitle:   { fontSize: 13, fontWeight: '600', color: P.white },
+  histDate:    { fontSize: 11, color: P.dimmed, marginTop: 1 },
+  histScore:   { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, marginLeft: 4 },
+  histScoreText:{ fontSize: 12, fontWeight: '800' },
+  histLabel:   { fontSize: 11, fontWeight: '600', marginLeft: 4, minWidth: 68, textAlign: 'right' },
 
-  // Quiz in progress
-  quizHeader:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  closeBtn:        { width: 38, height: 38, borderRadius: 11, backgroundColor: P.glass, borderWidth: 1, borderColor: P.glassBorder, justifyContent: 'center', alignItems: 'center' },
-  quizHeaderTitle: { fontSize: 15, fontWeight: '700', color: P.white, flex: 1, textAlign: 'center', marginHorizontal: 10 },
-  quizCounter:     { fontSize: 13, color: P.teal, fontWeight: '700' },
+  // ── Quiz screen ──
+  quizTopBar:   { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
+  quizBackBtn:  { width: 36, height: 36, borderRadius: 11, backgroundColor: P.glass, justifyContent: 'center', alignItems: 'center' },
+  progressWrap: { flex: 1, height: 8, backgroundColor: P.glass, borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 4 },
+  qCounter:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  qCounterText: { fontSize: 12, fontWeight: '700' },
 
-  progressTrack: { height: 5, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 5, overflow: 'hidden', marginBottom: 28 },
-  progressFill:  { height: '100%', borderRadius: 5 },
+  xpStrip:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 8, backgroundColor: 'rgba(255,255,255,0.03)', borderBottomWidth: 1, borderBottomColor: P.glassBorder },
+  xpStripText:{ fontSize: 11, color: P.muted, fontWeight: '600' },
+  xpStripDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: P.dimmed },
 
-  questionCard: { backgroundColor: P.navyCard, borderRadius: 20, padding: 22, marginBottom: 20, borderWidth: 1, borderColor: P.glassBorder },
-  questionNum:  { fontSize: 11, color: P.teal, fontWeight: '700', letterSpacing: 1.5, marginBottom: 10 },
-  questionText: { fontSize: 18, fontWeight: '700', color: P.white, lineHeight: 26 },
+  quizScroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
 
-  options:    { gap: 10 },
-  optionBtn:  { flexDirection: 'row', alignItems: 'center', backgroundColor: P.navyCard, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: P.glassBorder, gap: 12 },
-  optionDot:  { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
-  optionText: { flex: 1, fontSize: 14, color: P.white, fontWeight: '500' },
+  qCard:      { backgroundColor: P.navyCard, borderRadius: 22, padding: 22, marginBottom: 20, borderWidth: 1, borderColor: P.glassBorder },
+  hintRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  hintText:   { fontSize: 12, color: P.amber, fontStyle: 'italic' },
+  questionText:{ fontSize: 20, fontWeight: '800', color: P.white, lineHeight: 28, marginBottom: 18 },
+  stepDots:   { flexDirection: 'row', gap: 6 },
+  stepDot:    { width: 8, height: 8, borderRadius: 4 },
 
-  // Results
-  resultsHero:      { borderRadius: 24, padding: 32, alignItems: 'center', marginBottom: 24, overflow: 'hidden' },
-  heroRing:         { position: 'absolute', top: -30, right: -30, width: 130, height: 130, borderRadius: 65, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  resultsBadge:     { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', letterSpacing: 2, marginTop: 14, marginBottom: 4 },
-  resultsQuizTitle: { fontSize: 20, fontWeight: '800', color: P.white },
+  optionsWrap: { gap: 12 },
+  option:      { flexDirection: 'row', alignItems: 'center', backgroundColor: P.navyCard, borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: P.glassBorder, gap: 12, overflow: 'hidden' },
+  optBar:      { width: 4, height: 36, borderRadius: 2, flexShrink: 0 },
+  radio:       { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: P.muted, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  optText:     { flex: 1, fontSize: 15, color: P.muted, fontWeight: '500' },
+  optScore:    { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  optScoreText:{ fontSize: 11, fontWeight: '700' },
 
-  scoreWrap:   { alignItems: 'center', marginBottom: 24 },
-  scoreCircle: { width: 140, height: 140, borderRadius: 70, backgroundColor: P.navyCard, justifyContent: 'center', alignItems: 'center', borderWidth: 4 },
-  scoreVal:    { fontSize: 44, fontWeight: '800' },
-  scoreLabel:  { fontSize: 13, color: P.muted, marginTop: 4, fontWeight: '600' },
+  // ── Results screen ──
+  resultsHero: { borderRadius: 24, padding: 28, alignItems: 'center', marginBottom: 0, overflow: 'hidden' },
+  heroRing:    { position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', top: -40, right: -40 },
+  heroRing2:   { position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', bottom: -30, left: -20 },
+  heroComplete:{ fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 2, marginTop: 14, textTransform: 'uppercase' },
+  heroTitle:   { fontSize: 22, fontWeight: '800', color: P.white, marginBottom: 10 },
+  xpBadge:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245,158,11,0.2)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(245,158,11,0.4)' },
+  xpBadgeText: { fontSize: 13, fontWeight: '700', color: P.amber },
 
-  insightCard:    { flexDirection: 'row', alignItems: 'flex-start', gap: 14, backgroundColor: P.navyCard, borderRadius: 18, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: P.glassBorder },
-  insightIconBox: { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  insightTitle:   { fontSize: 15, fontWeight: '700', color: P.white, marginBottom: 4 },
-  insightText:    { fontSize: 13, color: P.muted, lineHeight: 20 },
+  ringWrap:   { alignItems: 'center', marginVertical: 24 },
+  ringOuter:  { width: 150, height: 150, borderRadius: 75, borderWidth: 10, justifyContent: 'center', alignItems: 'center' },
+  ringInner:  { width: 120, height: 120, borderRadius: 60, borderWidth: 4, justifyContent: 'center', alignItems: 'center', backgroundColor: P.navyCard },
+  ringScore:  { fontSize: 32, fontWeight: '800' },
+  ringLabel:  { fontSize: 13, fontWeight: '600', marginTop: 2 },
+  xpBurst:    { position: 'absolute', right: 80, top: 10, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  xpBurstText:{ fontSize: 11, fontWeight: '800', color: P.white },
 
-  recsCard:   { backgroundColor: P.navyCard, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: P.glassBorder, marginBottom: 24 },
-  recRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  recBorder:  { borderTopWidth: 1, borderTopColor: P.glassBorder },
-  recDot:     { width: 8, height: 8, borderRadius: 4 },
-  recText:    { fontSize: 14, color: P.muted, flex: 1, lineHeight: 20 },
+  breakdownCard:  { backgroundColor: P.navyCard, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: P.glassBorder },
+  breakdownTitle: { fontSize: 15, fontWeight: '700', color: P.white, marginBottom: 14 },
+  breakRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  breakBorder:    { borderTopWidth: 1, borderTopColor: P.glassBorder },
+  breakDot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  breakQ:         { fontSize: 12, color: P.muted, marginBottom: 3 },
+  breakA:         { fontSize: 13, fontWeight: '600' },
+  breakPts:       { fontSize: 13, fontWeight: '800', minWidth: 40, textAlign: 'right' },
 
-  saveBtnWrap: { borderRadius: 18, overflow: 'hidden', marginBottom: 12, shadowColor: P.teal, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 14, elevation: 8 },
-  saveBtn:     { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  saveBtnText: { fontSize: 16, fontWeight: '700', color: P.white },
-  outlineBtn:  { height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 16, borderWidth: 1.5, borderColor: P.glassBorder },
-  outlineBtnText: { fontSize: 15, fontWeight: '700', color: P.muted },
+  badgeCard:      { flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1.5, overflow: 'hidden', backgroundColor: P.navyCard },
+  badgeIconBox:   { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  badgeLabel:     { fontSize: 10, fontWeight: '700', color: P.muted, letterSpacing: 1.5, marginBottom: 4 },
+  badgeName:      { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  badgeDesc:      { fontSize: 11, color: P.dimmed, lineHeight: 16 },
+
+  recsCard:   { backgroundColor: P.navyCard, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: P.glassBorder },
+  recsTitle:  { fontSize: 15, fontWeight: '700', color: P.white, marginBottom: 14 },
+  recRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 },
+  recNum:     { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  recNumText: { fontSize: 13, fontWeight: '800' },
+  recText:    { flex: 1, fontSize: 14, color: P.muted, lineHeight: 20 },
+
+  saveBtnWrap:{ borderRadius: 18, overflow: 'hidden', marginBottom: 12 },
+  saveBtn:    { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  saveBtnText:{ fontSize: 16, fontWeight: '700', color: P.white },
+  backBtn:    { alignItems: 'center', paddingVertical: 14 },
+  backBtnText:{ fontSize: 15, color: P.muted, fontWeight: '600' },
 });
 
 export default MentalHealthQuizScreen;
