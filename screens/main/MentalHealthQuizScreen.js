@@ -677,4 +677,4 @@ const st = StyleSheet.create({
   backBtnText:{ fontSize: 15, color: P.muted, fontWeight: '600' },
 });
 
-export default MentalHealthQuizScreen;
+export default MentalHealthQuizScreen; 
